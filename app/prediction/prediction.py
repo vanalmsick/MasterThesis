@@ -61,7 +61,7 @@ def df_to_dataset(dataframe, target_col='tr_f_ebit', shuffle=True, batch_size=32
 
 
 class data_iterator:
-    def __init__(self, df, iter_col='index', history_size=4*4, target_size=4*2, steps=1, shuffle=True):
+    def __init__(self, df, iter_col='index', history_size=4*4, target_size=4*2, steps=5, shuffle=True):
         self.data = df.copy()
         self.history_size = history_size
         self.target_size = target_size
@@ -71,8 +71,8 @@ class data_iterator:
             self.data.set_index(iter_col, inplace=True)
         self.data.sort_index(inplace=True)
         self.iter_list = list(np.unique(self.data.index.values))
-        self.lower_idx = list(range(0, len(self.iter_list) - history_size - target_size + 1, steps))
-        self.upper_idx = list(range(history_size + target_size - 1, len(self.iter_list), steps))
+        self.lower_idx = list(range(0, len(self.iter_list) - history_size - (target_size * 2) + 1, steps))
+        self.upper_idx = list(range(history_size + (target_size * 2) - 1, len(self.iter_list), steps))
 
     def __iter__(self):
         return self
@@ -97,71 +97,136 @@ def normalize_data(df, exclude_cols=[]):
     return df, normalization_param
 
 
-def split_data(df, batch_sep_col='stock', history_size=4*2, target_size=4*2, y_col='tr_f_ebit', drop_cols=[]):
-    X = df.copy()
-    X.drop(columns=drop_cols, inplace=True)
-    X_input = []
-    y_output = []
-    y_hist = []
-    X_cols = X.columns.tolist()
-    X_cols.remove(batch_sep_col)
-    inxed_list = list(np.unique(X[batch_sep_col]))
-    for idx in inxed_list:
-        X_tmp = X[X[batch_sep_col] == idx][X_cols]
+def split_data(df, batch_sep_col='stock', history_size=4*2, target_size=4*2, val_spit=0.2, y_col='tr_f_ebit', drop_cols=[], shuffle=True):
+    copy_df = df.copy()
+    copy_df[batch_sep_col] = copy_df[batch_sep_col].astype("category")
+    drop_cols = drop_cols + [batch_sep_col]
+
+    # Seperate Train and Validation data randomly
+    batch_col_list = np.array(copy_df[batch_sep_col].unique())
+    if shuffle:
+        np.random.seed(42)
+        np.random.shuffle(batch_col_list)
+    split_point = int(val_spit * len(batch_col_list))
+    train_batch = batch_col_list[:-split_point]
+    val_batch = batch_col_list[-split_point:]
+    test_batch = batch_col_list
+
+    date_list = np.unique(copy_df.index.values)
+    date_list.sort()
+    if len(date_list) != history_size + target_size * 2:
+        raise Exception('Unexpected date length of data.')
+    train_val_dates = date_list[:history_size + target_size]
+    test_dates = date_list[-(history_size + target_size):]
+
+    train_val_data = copy_df.loc[train_val_dates]
+    test_data = copy_df.loc[test_dates]
+
+    X_cols = [i for i in copy_df.columns.tolist() if i not in drop_cols]
+
+    # Training data
+    X_train = []
+    y_train_hist = []
+    y_train = []
+    for idx in train_batch:
+        X_tmp = train_val_data[train_val_data[batch_sep_col] == idx][X_cols]
         if X_tmp.shape[0] == (history_size + target_size):
-            X_input.append(np.array(X_tmp)[:-target_size, :])
-            y_tmp = X[X[batch_sep_col] == idx][y_col]
-            y_output.append(np.atleast_2d(np.array(y_tmp))[:, history_size:])
-            y_hist.append(np.atleast_2d(np.array(y_tmp))[:, :history_size])
-    X_input = tf.stack(X_input)
-    y_output = tf.stack(y_output)
-    y_hist = tf.stack(y_hist)
-    return X_input, y_output, y_hist
+            y_tmp = train_val_data[train_val_data[batch_sep_col] == idx][y_col]
+            y_train.append(np.atleast_2d(np.array(y_tmp))[:, history_size:])
+            y_train_hist.append(np.atleast_2d(np.array(y_tmp))[:, :history_size])
+            X_train.append(np.array(X_tmp)[:-target_size, :])
+    X_train = tf.stack(X_train)
+    y_train_hist = tf.stack(y_train_hist)
+    y_train = tf.stack(y_train)
+
+
+    # Validation data
+    X_val = []
+    y_val_hist = []
+    y_val = []
+    for idx in val_batch:
+        X_tmp = train_val_data[train_val_data[batch_sep_col] == idx][X_cols]
+        if X_tmp.shape[0] == (history_size + target_size):
+            y_tmp = train_val_data[train_val_data[batch_sep_col] == idx][y_col]
+            y_val.append(np.atleast_2d(np.array(y_tmp))[:, history_size:])
+            y_val_hist.append(np.atleast_2d(np.array(y_tmp))[:, :history_size])
+            X_val.append(np.array(X_tmp)[:-target_size, :])
+    X_val = tf.stack(X_val)
+    y_val_hist = tf.stack(y_val_hist)
+    y_val = tf.stack(y_val)
+
+
+    # test data
+    X_test = []
+    y_test_hist = []
+    y_test = []
+    for idx in test_batch:
+        X_tmp = test_data[test_data[batch_sep_col] == idx][X_cols]
+        if X_tmp.shape[0] == (history_size + target_size):
+            y_tmp = test_data[test_data[batch_sep_col] == idx][y_col]
+            y_test.append(np.atleast_2d(np.array(y_tmp))[:, history_size:])
+            y_test_hist.append(np.atleast_2d(np.array(y_tmp))[:, :history_size])
+            X_test.append(np.array(X_tmp)[:-target_size, :])
+    X_test = tf.stack(X_test)
+    y_test_hist = tf.stack(y_test_hist)
+    y_test = tf.stack(y_test)
+
+
+    out_data = {'train': {'X':X_train, 'y':y_train, 'y_hist':y_train_hist},
+                'val': {'X':X_val, 'y':y_val, 'y_hist':y_val_hist},
+                'test': {'X':X_test, 'y':y_test, 'y_hist':y_test_hist}}
+
+
+    return out_data
 
 
 
 
 
-def compile_and_fit(model, X, y, patience=100, model_name='UNKNOWN', MAX_EPOCHS=20):
-  tracking_address = my.get_project_directories(key='tensorboard_logs')
-  TBLOGDIR = tracking_address + "/" + model_name
+def compile_and_fit(model, X_train, y_train, X_val=None, y_val=None, patience=250, model_name='UNKNOWN', MAX_EPOCHS=20):
+    tracking_address = my.get_project_directories(key='tensorboard_logs')
+    TBLOGDIR = tracking_address + "/" + model_name
 
-  tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=TBLOGDIR, histogram_freq=1)
-  early_stopping = tf.keras.callbacks.EarlyStopping(monitor='loss',
-                                                    patience=patience,
-                                                    mode='min',
-                                                    restore_best_weights=True)
-  model.compile(loss=tf.losses.MeanAbsolutePercentageError(),
-                optimizer=tf.optimizers.Adam(),
-                metrics=[tf.metrics.MeanAbsoluteError(), tf.metrics.MeanAbsolutePercentageError()])
+    tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=TBLOGDIR, histogram_freq=1)
+    model.compile(loss=tf.losses.MeanAbsoluteError(),
+                  optimizer=tf.optimizers.Adam(),
+                  metrics=[tf.metrics.MeanAbsoluteError(), tf.metrics.MeanAbsolutePercentageError()])
 
-  history = model.fit(X, y, epochs=MAX_EPOCHS,callbacks=[early_stopping, tensorboard_callback])
+    if X_val is not None and y_val is not None:
+        early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
+                                                          patience=patience,
+                                                          mode='min',
+                                                          restore_best_weights=True)
+        training_history = model.fit(X_train, y_train, epochs=MAX_EPOCHS, validation_data=(X_val, y_val), callbacks=[early_stopping, tensorboard_callback])
+    else:
+        early_stopping = tf.keras.callbacks.EarlyStopping(monitor='loss',
+                                                          patience=patience,
+                                                          mode='min',
+                                                          restore_best_weights=True)
+        training_history = model.fit(X_train, y_train, epochs=MAX_EPOCHS, callbacks=[early_stopping, tensorboard_callback])
 
-  return history
+    return training_history
 
 
-def plot(model, y_true, y_hist, normalization_param, y_col, example=0):
+def plot(y_hist, y_pred, y_true, normalization_param, y_name='tr_f_ebit', model_name='Model', examples=0):
     scale = 1000000
 
-    if type(example) != list:
-        example = [example]
+    if type(examples) != list:
+        examples = [examples]
 
-    plt.figure(figsize=(12, 3 * len(example)))
+    plt.figure(figsize=(12, 3 * len(examples)))
 
-    for i in range(len(example)):
-        ex = example[i]
+    for i in range(len(examples)):
+        ex = examples[i]
 
-        plt.subplot(len(example), 1, i + 1)
-        plt.ylabel(f'{y_col} [example {ex}]')
+        plt.subplot(len(examples), 1, i + 1)
+        plt.ylabel(f'{y_name} [example {ex}]')
 
-        y_pred_i = model.predict(X)[ex, -1, :]
-        y_true_i = y_true[ex, :, :][0]
-        y_hist_i = np.array(y_hist[ex, :, :])[0]
-        mean = normalization_param['mean'][y_col]
-        std = normalization_param['std'][y_col]
-        y_pred_real = y_pred_i * std + mean
-        y_true_real = y_true_i * std + mean
-        y_hist_real = y_hist_i * std + mean
+        mean = normalization_param['mean'][y_name]
+        std = normalization_param['std'][y_name]
+        y_pred_real = np.array(y_pred[i, -1, :]) * std + mean
+        y_true_real = np.array(y_true[i, -1, :]) * std + mean
+        y_hist_real = np.array(y_hist[i, -1, :]) * std + mean
         x_hist = [int(i) for i in list(range(0, len(y_hist_real)))]
         x_pred = [int(i) for i in list(range(len(y_hist_real), len(y_hist_real) + len(y_true_real)))]
         plt.plot(x_hist, (y_hist_real / scale), label='Historical', marker='.', zorder=-10)
@@ -223,7 +288,7 @@ if __name__ == '__main__':
         print(period)
 
         normalized_data, normalization_param = normalize_data(df=partial_data, exclude_cols=['period_date'])
-        X, y, y_hist = split_data(df=normalized_data, batch_sep_col=batch_sep_col, history_size=history_size, target_size=target_size, y_col=y_col, drop_cols=drop_cols)
+        data_splitted = split_data(df=normalized_data, batch_sep_col=batch_sep_col, history_size=history_size, target_size=target_size, y_col=y_col, drop_cols=drop_cols)
 
         linear = tf.keras.Sequential([
                                     tf.keras.layers.LSTM(117, return_sequences=True),
@@ -231,8 +296,17 @@ if __name__ == '__main__':
                                     tf.keras.layers.Dense(target_size)
                                     ])
 
-        history = compile_and_fit(X=X, y=y, model=linear, MAX_EPOCHS=5000, model_name=('LSTM:'+period))
+        history = compile_and_fit(X_train=data_splitted['train']['X'], y_train=data_splitted['train']['y'], X_val=data_splitted['val']['X'], y_val=data_splitted['val']['y'], model=linear, MAX_EPOCHS=5000, model_name=('LSTM_' + period))
 
-        plot(model=linear, y_true=y, y_hist=y_hist, normalization_param=normalization_param, y_col=y_col, example=[0, 5, 6, 20, 100])
-        #raise Excption('fghj')
+        print("Evaluate on test data")
+        results = linear.evaluate(data_splitted['test']['X'], data_splitted['test']['y'])
+        print("test loss, test acc:", results)
+
+        print("Generate predictions for 3 samples")
+        example_comps = [0, 5, 6, 20, 100]
+        predictions = linear.predict(tf.gather(data_splitted['test']['X'], example_comps))
+        print("predictions shape:", predictions.shape)
+
+        plot(y_hist=tf.gather(data_splitted['test']['y_hist'], example_comps), y_pred=predictions, y_true=tf.gather(data_splitted['test']['y'], example_comps), y_name=y_col, normalization_param=normalization_param, examples=example_comps)
+        raise Excption('fghj')
 

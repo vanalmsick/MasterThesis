@@ -25,7 +25,7 @@ def convenience_settings():
 
 
 def get_project_directories(key=None, **kwargs):
-    helpers_path = os.path.abspath(os.getcwd())
+    helpers_path = os.path.dirname(__file__)
     app_path = os.path.dirname(helpers_path)
     project_path = os.path.dirname(app_path)
     data_path = os.path.join(project_path, 'data')
