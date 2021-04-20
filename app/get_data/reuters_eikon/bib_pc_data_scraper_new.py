@@ -1,6 +1,11 @@
 import pandas as pd
 import os, warnings, datetime, progressbar, time, ast, pickle, json, sys, traceback
 
+### Add other shared functions ###
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+import helpers as my
+##################################
+
 
 def reuters_eikon_data_scraper(instruments: list, fields: list, properties:dict, api_key: str, id, test=False):
     if test:
@@ -97,7 +102,7 @@ def main_data_scraper(reuters_api, todo_list_path, output_folder, false_dev_data
 
 
 if __name__ == '__main__':
-    reuters_api = "f48ad3b9259a47a9b9359198fc164cb9ce3e2085"
+    reuters_api = my.get_credentials(credential='reuters_eikon_api')
 
     #os.chdir("J:\WinPy\portable_app")
     print('Wokring dir:', os.getcwd())

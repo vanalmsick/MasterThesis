@@ -3,18 +3,11 @@ import pandas as pd
 import numpy as np
 
 
-def postgresql_connect(params_dic):
-    """ Connect to the PostgreSQL database server """
-    conn = None
-    try:
-        # connect to the PostgreSQL server
-        print('Connecting to the PostgreSQL database...')
-        conn = psycopg2.connect(**params_dic)
-    except (Exception, psycopg2.DatabaseError) as error:
-        print(error)
-        sys.exit(1)
-    print("Connection successful")
-    return conn
+### Add other shared functions ###
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+import helpers as my
+##################################
+
 
 
 
@@ -63,13 +56,13 @@ class data_label():
         for clear_name in clear_name_list:
             if clear_name not in translate_dict:
                 sql = """SELECT DISTINCT reuters_name FROM data_fields WHERE clear_name = '{}'""".format(str(clear_name).replace("'",""))
-                with postgresql_connect(param_dic) as conn:
+                with my.postgresql_connect(param_dic) as conn:
                     reuters_name = sql_query(sql, conn)
                 if len(reuters_name) == 1:
                     translate_dict[clear_name] = reuters_name['reuters_name'].iloc[0]
                 elif len(reuters_name) == 2:
                     sql = """SELECT reuters_name, count(id) as counter FROM data_fields WHERE clear_name = '{}' GROUP BY reuters_name""".format(str(clear_name).replace("'",""))
-                    with postgresql_connect(param_dic) as conn:
+                    with my.postgresql_connect(param_dic) as conn:
                         reuters_name = sql_query(sql, conn)
                     if reuters_name['counter'].iloc[0] > reuters_name['counter'].iloc[1] + 2:
                         translate_dict[clear_name] = str(reuters_name['reuters_name'].iloc[0])
@@ -94,13 +87,7 @@ class data_label():
 def main_import_tosql():
     import_path = '/data/import_getdata'
     file_list = [f for f in os.listdir(import_path) if os.path.isfile(os.path.join(import_path, f))]
-    param_dic = {
-        "host": "localhost",
-        "port": "5432",
-        "database": "postgres",
-        "user": "postgres",
-        "password": "PASSWORD"
-    }
+    param_dic = my.get_credentials(credential='local_databases')['postgres']
 
     file_list.remove('.DS_Store')
     tranlate = data_label()
@@ -123,7 +110,7 @@ def main_import_tosql():
         print(df)
 
 
-        with postgresql_connect(param_dic) as conn:
+        with my.postgresql_connect(param_dic) as conn:
             df_insert_sql(conn=conn, df=df, table='data')
 
         now = datetime.datetime.now()
@@ -132,7 +119,7 @@ def main_import_tosql():
         for id in id_list:
             print(id)
             sql = """UPDATE getdata_todo SET status = {}, timestamp = '{}' WHERE id = {}""".format(str(1), now, id)
-            with postgresql_connect(param_dic) as conn:
+            with my.postgresql_connect(param_dic) as conn:
                 with conn.cursor() as cur:
                     cur.execute(sql)
                 conn.commit()

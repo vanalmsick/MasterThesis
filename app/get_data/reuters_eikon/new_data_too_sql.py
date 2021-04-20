@@ -6,18 +6,12 @@ import pickle
 import os, json, psycopg2, psycopg2.extras, sys, math
 
 
-def postgresql_connect(params_dic):
-    """ Connect to the PostgreSQL database server """
-    conn = None
-    try:
-        # connect to the PostgreSQL server
-        print('Connecting to the PostgreSQL database...')
-        conn = psycopg2.connect(**params_dic)
-    except (Exception, psycopg2.DatabaseError) as error:
-        print(error)
-        sys.exit(1)
-    print("Connection successful")
-    return conn
+### Add other shared functions ###
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+import helpers as my
+##################################
+
+
 
 
 
@@ -47,6 +41,7 @@ def df_insert_sql(conn, df, table):
     #print("execute_values() done")
     cursor.close()
 
+
 def df_rename(df, head):
     col_list = df.columns.tolist()
     col_should_be = [i['displayName'] for i in head]
@@ -65,13 +60,7 @@ def df_rename(df, head):
 def data_to_sql(folder_path):
     files = os.listdir(folder_path)
 
-    param_dic = {
-        "host": "localhost",
-        "port": "5432",
-        "database": "reuters",
-        "user": "postgres",
-        "password": "PASSWORD"
-    }
+    param_dic = my.get_credentials(credential='local_databases')['reuters']
 
     for f in files:
         file = (folder_path + '/' + f)
@@ -87,7 +76,7 @@ def data_to_sql(folder_path):
             df['TR_REVENUE_DATE'] = pd.to_datetime(df['TR_REVENUE_DATE'], format='%Y-%m-%d')
             df['TR_BSPERIODENDDATE'] = pd.to_datetime(df['TR_BSPERIODENDDATE'], format='%Y-%m-%d')
 
-            with postgresql_connect(param_dic) as conn:
+            with my.postgresql_connect(param_dic) as conn:
                 df_insert_sql(conn=conn, df=df, table='data')
         elif os.path.isfile((file[:-24] + '.err.pkl')): # ERROR
             pkl_file = (file[:-24] + '.err.pkl')

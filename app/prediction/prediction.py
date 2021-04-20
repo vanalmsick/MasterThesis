@@ -8,36 +8,20 @@ import shutil, time, math
 import matplotlib.pyplot as plt
 
 
-pd.set_option('display.max_rows', 50)
-pd.set_option('display.max_columns', 12)
-pd.set_option('display.width', 300)
+### Add other shared functions ###
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+import helpers as my
+##################################
 
 
-def postgresql_connect(params_dic):
-    """ Connect to the PostgreSQL database server """
-    conn = None
-    try:
-        # connect to the PostgreSQL server
-        print('Connecting to the PostgreSQL database...')
-        conn = psycopg2.connect(**params_dic)
-    except (Exception, psycopg2.DatabaseError) as error:
-        print(error)
-        sys.exit(1)
-    print("Connection successful")
-    return conn
+
 
 
 def download_data_from_sql(data_version='default', recache=False):
     query = "SELECT * FROM selected_data WHERE report_type = 'FQ'"
     cache_folder = "cache/" + str(data_version) + '/'
 
-    param_dic = {
-        "host": "localhost",
-        "port": "5432",
-        "database": "reuters",
-        "user": "postgres",
-        "password": "PASSWORD"
-    }
+    param_dic = my.get_credentials(credential='local_databases')['reuters']
 
     if not os.path.exists(cache_folder):
         os.makedirs(cache_folder)
@@ -46,7 +30,7 @@ def download_data_from_sql(data_version='default', recache=False):
     if recache or not os.path.exists((cache_folder + 'raw_data.csv')):
         print('Getting raw data via sql...')
 
-        with postgresql_connect(param_dic) as conn:
+        with my.postgresql_connect(param_dic) as conn:
             df = pd.read_sql_query(query, con=conn)
             df.drop(columns=['tr_revenue_date', 'tr_bsperiodenddate', 'report_type', 'request_id', 'last_updated'], inplace=True)
             df.to_csv((cache_folder + 'raw_data.csv'), index=False)
@@ -136,15 +120,10 @@ def split_data(df, batch_sep_col='stock', history_size=4*2, target_size=4*2, y_c
 
 
 
-def get_curr_time():
-    return dt.datetime.now().strftime("%Y.%m.%d.%H.%M.%S")
-
-def get_start_time():
-    return get_curr_time()
-
 
 
 def compile_and_fit(model, X, y, patience=100, model_name='UNKNOWN', MAX_EPOCHS=20):
+  tracking_address = my.get_project_directories(key='tensorboard_logs')
   TBLOGDIR = tracking_address + "/" + model_name
 
   tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=TBLOGDIR, histogram_freq=1)
@@ -211,6 +190,7 @@ def feature_engineering(path):
 
 
 if __name__ == '__main__':
+    my.convenience_settings()
     data_version = 'default'
     recache = False
     iter_col = ['period_year', 'period_quarter']
@@ -221,7 +201,7 @@ if __name__ == '__main__':
     batch_sep_col = 'stock'
 
     ### run tensorboard
-    tracking_address = '/Users/vanalmsick/opt/anaconda3/envs/dev/lib/python3.8/site-packages/tensorboard/logs'
+    tracking_address = my.get_project_directories(key='tensorboard_logs')
     try:
         shutil.rmtree(tracking_address)
         time.sleep(10)
@@ -230,7 +210,7 @@ if __name__ == '__main__':
     os.mkdir(tracking_address)
 
 
-    cache_folder = "cache/" + str(data_version) + '/'
+    cache_folder = "prediction/cache/" + str(data_version) + '/'
     download_data_from_sql(data_version=data_version, recache=recache)
 
     raw_data = feature_engineering(path=(cache_folder + 'raw_data.csv'))

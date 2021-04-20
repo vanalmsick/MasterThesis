@@ -1,7 +1,28 @@
-import sys, os
+import sys, os, pathlib
 import datetime as dt
 import tables as tb
 import pandas as pd
+import psycopg2, psycopg2.extras
+import configparser
+
+
+######################################### GENERAL #########################################
+
+
+def change_workdir():
+    new_wkdir = os.path.dirname(os.path.dirname(__file__))
+    os.chdir(new_wkdir)
+    print('Working dir changed to:', os.getcwd())
+
+
+
+def convenience_settings():
+    pd.set_option('display.max_rows', 50)
+    pd.set_option('display.max_columns', 12)
+    pd.set_option('display.width', 300)
+    print('Custom parameters set')
+    change_workdir()
+
 
 def get_project_directories(key=None, **kwargs):
     helpers_path = os.path.abspath(os.getcwd())
@@ -9,8 +30,10 @@ def get_project_directories(key=None, **kwargs):
     project_path = os.path.dirname(app_path)
     data_path = os.path.join(project_path, 'data')
     credentials_path = os.path.join(project_path, 'credentials')
+    working_dir = os.getcwd()
+    tensorboard_logs = '/Users/vanalmsick/opt/anaconda3/envs/dev/lib/python3.8/site-packages/tensorboard/logs'
 
-    dir_dict = {'project_dir': project_path, 'app_dir': app_path, 'data_dir': data_path, 'cred_dir':credentials_path, 'helpers_dir': helpers_path}
+    dir_dict = {'project_dir': project_path, 'app_dir': app_path, 'data_dir': data_path, 'cred_dir':credentials_path, 'helpers_dir': helpers_path, 'working_dir': working_dir, 'tensorboard_logs':tensorboard_logs}
 
     if key is None:
         return dir_dict
@@ -18,8 +41,14 @@ def get_project_directories(key=None, **kwargs):
         return dir_dict[key]
 
 
+def get_curr_time():
+    return dt.datetime.now().strftime("%Y.%m.%d.%H.%M.%S")
 
-def get_credentials(cred=None, cred_dir=None, dir_dict=None, **kwargs):
+def get_start_time():
+    return get_curr_time()
+
+
+def get_credentials(credential=None, cred_dir=None, dir_dict=None, **kwargs):
     if cred_dir is None and dir_dict is None:
         cred_dir = get_project_directories(key='cred_dir')
     elif cred_dir is None and dir_dict is not None:
@@ -29,84 +58,86 @@ def get_credentials(cred=None, cred_dir=None, dir_dict=None, **kwargs):
     creds = {}
 
     for file in file_list:
-        with open(os.path.join(cred_dir, file), 'r') as f:
-            creds[file.split('.')[0]] = f.read()
+        if file[-4:] == '.ini':
+            config = configparser.ConfigParser()
+            config.read(os.path.join(cred_dir, file))
+            conf_dict = config._sections
+            if len(conf_dict.keys()) == 1:
+                key = list(conf_dict.keys())[0]
+                creds[key] = conf_dict[key]
+            else:
+                creds[file.split('.')[0]] = conf_dict
+        elif file[-4:] == '.key':
+            with open(os.path.join(cred_dir, file), 'r') as f:
+                creds[file.split('.')[0]] = f.read()
 
-    if cred is None:
+    if credential is None:
         return creds
     else:
-        return creds[cred]
+        return creds[credential]
 
 
 
-
-class database():
-    def __init__(self, database, data_dir=None):
-        if data_dir is None:
-            data_dir = get_project_directories('data_dir')
-        self.data_dir = data_dir
-        self.hdf5_dir = os.path.join(self.data_dir, (database + '.h5'))
-
-        self.hdf = pd.HDFStore(self.hdf5_dir, mode='a')
+######################################### SQL/Database #########################################
 
 
-    def append(self, df):
-        needed_cols = {'ref_date':'dateint', 'stock_symbol':'category', 'report_type':'category', 'data_label':object, 'data_value':float}
-
-        if 'last_updated' not in df.columns.to_list():
-            df['last_updated'] = int(dt.datetime.now().strftime('%Y%m%d%H%M%S'))
-
-        for col in needed_cols.keys():
-            if not col in df.columns.to_list():
-                raise Exception('Column {} is missing in df.'.format(col))
-
-            if needed_cols[col] == 'dateint':
-                if df.dtypes[col] != int or not (df[col].min() >= 19000101000000 and df[col].max() < 20220101000000):
-                    raise Exception('Column {} has not data-type dateint which is "%Y%m%d%H%M%S".'.format(col))
-            elif needed_cols[col] == 'category':
-                if str(df.dtypes[col]) != 'category':
-                    raise Exception(
-                        'Column {} has data-type {} but should have category please correct.'.format(col, df.dtypes[col]))
-            else:
-                if df.dtypes[col] != needed_cols[col]:
-                    raise Exception('Column {} has data-type {} but should have {} please correct.'.format(col, df.dtypes[col], needed_cols[col]))
-
-        df.set_index(['ref_date', 'stock_symbol', 'report_type', 'data_label'], inplace=True)
-        self.hdf.append('/', df, format='table')
+def postgresql_connect(params_dic):
+    """ Connect to the PostgreSQL database server """
+    conn = None
+    try:
+        # connect to the PostgreSQL server
+        print('Connecting to the PostgreSQL database...')
+        conn = psycopg2.connect(**params_dic)
+    except (Exception, psycopg2.DatabaseError) as error:
+        print(error)
+        sys.exit(1)
+    print("Connection successful")
+    return conn
 
 
-    def read(self):
-        return self.hdf.get('/')
+def _dtype_mapping():
+    return {'object' : 'TEXT',
+        'int64' : 'INT',
+        'float64' : 'FLOAT',
+        'datetime64' : 'DATETIME',
+        'bool' : 'TINYINT',
+        'category' : 'TEXT',
+        'timedelta[ns]' : 'TEXT'}
 
-    def get(self):
-        return self.read()
 
-    def select(self, **kwargs):
-        return self.hdf.select(key='/', **kwargs)
 
-    def info(self):
-        return self.hdf.info()
+def _gen_tbl_cols_sql(df):
+    dmap = _dtype_mapping()
+    sql = "pi_db_uid SERIAL"
+    df1 = df.rename(columns = {"" : "nocolname"})
+    hdrs = df1.dtypes.index
+    hdrs_list = [(hdr, str(df1[hdr].dtype)) for hdr in hdrs]
+    for i, hl in enumerate(hdrs_list):
+        sql += " ,{0} {1}".format(hl[0], dmap[hl[1]])
+    return sql
 
-    def keys(self):
-        return self.hdf.keys()
 
-    def __exit__(self):
-        self.hdf.close()
+def create_sql_tbl(df, conn, tbl_name):
+    tbl_cols_sql = _gen_tbl_cols_sql(df)
+    sql = "CREATE TABLE {0} ({1})".format(tbl_name, tbl_cols_sql)
+    cur = conn.cursor()
+    cur.execute(sql)
+    cur.close()
+    conn.commit()
+
+
 
 
 
 
 
 if __name__ == '__main__':
-    print(get_project_directories())
-    print(get_project_directories('project_dir'))
-    print(get_credentials())
-    print(get_credentials('reuters_eikon_api'))
+    #print(get_project_directories())
+    #print(get_project_directories('project_dir'))
+    #print(get_credentials())
+    #print(get_credentials('reuters_eikon_api'))
 
-    data = database(database='test')
-    df = pd.DataFrame({'ref_date':[20200202162101,20200202162101,20200202162101,20200202162101], 'stock_symbol':['APPL','AAPL','AAPL','APPL'], 'report_type':['A','Q','A','Q'], 'data_label':['fdgdf','fdgdf','fdgdf','fdgdf'], 'data_value':[0.,1.,2.,3.]})
-    df['stock_symbol'] = df['stock_symbol'].astype("category")
-    df['report_type'] = df['report_type'].astype("category")
-    print(data.append(df))
-    print(data.get())
-    #print(data.select(where='index > 2'))
+    get_credentials()
+
+
+
