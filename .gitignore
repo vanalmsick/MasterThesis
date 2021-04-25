@@ -135,3 +135,5 @@ data/
 credentials/
 .key
 /cache/
+!example_key.ini
+!example_api_key.key
