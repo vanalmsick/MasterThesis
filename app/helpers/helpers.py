@@ -1,7 +1,8 @@
-import sys, os, pathlib
+import sys, os, pathlib, warnings, datetime
 import datetime as dt
 import tables as tb
 import pandas as pd
+import numpy as np
 import psycopg2, psycopg2.extras
 import configparser
 
@@ -97,35 +98,146 @@ def postgresql_connect(params_dic):
 
 def _dtype_mapping():
     return {'object' : 'TEXT',
-        'int64' : 'INT',
-        'float64' : 'FLOAT',
+        'string': 'TEXT',
+        'int64' : 'REAL', # INT
+        'float64' : 'REAL',
         'datetime64' : 'DATETIME',
-        'bool' : 'TINYINT',
+        'bool' : 'BOOLEAN',
         'category' : 'TEXT',
-        'timedelta[ns]' : 'TEXT'}
+        'timedelta[ns]' : 'TIMESTAMP'}
 
 
 
 def _gen_tbl_cols_sql(df):
     dmap = _dtype_mapping()
-    sql = "pi_db_uid SERIAL"
+    sql = ""
     df1 = df.rename(columns = {"" : "nocolname"})
     hdrs = df1.dtypes.index
     hdrs_list = [(hdr, str(df1[hdr].dtype)) for hdr in hdrs]
     for i, hl in enumerate(hdrs_list):
-        sql += " ,{0} {1}".format(hl[0], dmap[hl[1]])
-    return sql
+        sql += " ,{0} {1}".format(hl[0].lower(), dmap[str(hl[1]).lower()])
+    return sql[2:]
 
 
-def create_sql_tbl(df, conn, tbl_name):
-    tbl_cols_sql = _gen_tbl_cols_sql(df)
-    sql = "CREATE TABLE {0} ({1})".format(tbl_name, tbl_cols_sql)
-    cur = conn.cursor()
-    cur.execute(sql)
-    cur.close()
+def create_sql_tbl(df, conn, tbl_name, schema='public'):
+    if check_table_exists(conn=conn, table_name=tbl_name, schema=schema):
+        print('Table {}.{} already exists.'.format(schema, tbl_name))
+    else:
+        tbl_cols_sql = _gen_tbl_cols_sql(df)
+        sql = "CREATE TABLE {}.{} ({})".format(schema, tbl_name, tbl_cols_sql)
+        cur = conn.cursor()
+        cur.execute(sql)
+        cur.close()
+        conn.commit()
+
+
+def check_table_exists(conn, table_name, schema='public'):
+    sql = """SELECT EXISTS (
+               SELECT FROM pg_catalog.pg_class c
+               JOIN   pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+               WHERE  n.nspname = '{schema}'
+               AND    c.relname = '{table}'
+               AND    c.relkind = 'r'    -- only tables
+               )""".format(schema=schema, table=table_name)
+    with conn.cursor() as cur:
+        cur.execute(sql)
+        answer = cur.fetchall()[0][0]
+    return answer
+
+
+def sql_query(sql, conn):
+    return pd.read_sql_query(sql, conn)
+
+
+def df_insert_sql(conn, df, table):
+    """
+    Using psycopg2.extras.execute_values() to insert the dataframe
+    """
+    # Create a list of tupples from the dataframe values
+    df = df.replace({pd.NaT: np.nan, '':np.nan})
+    for col in (df.select_dtypes(include=[np.datetime64])).columns.tolist():
+        df[col] = [d if not pd.isnull(d) else None for d in df[col]]
+    warnings.filterwarnings('ignore')
+    np_array = df.replace({pd.np.nan: None}).values
+    warnings.filterwarnings('default')
+    tuples = [tuple(x) for x in np_array]
+    # Comma-separated dataframe columns
+    cols = ','.join(df.columns.tolist())
+    # SQL quert to execute
+    query  = "INSERT INTO %s(%s) VALUES %%s" % (table, cols)
+    cursor = conn.cursor()
+    try:
+        psycopg2.extras.execute_values(cursor, query, tuples)
+        conn.commit()
+    except (Exception, psycopg2.DatabaseError) as error:
+        print("Error: %s" % error)
+        conn.rollback()
+        cursor.close()
+        return 1, error
+    #print("execute_values() done")
+    cursor.close()
+
+
+def update_request_status(request_id, conn, schema, new_status=1):
+    if type(request_id) != list:
+        request_id = [request_id]
+
+    with conn.cursor() as cur:
+        for id in request_id:
+            updated = datetime.datetime.now().isoformat()
+            SQL = """UPDATE {schema}.data_request_list SET status = {status}, last_updated = '{updated}' WHERE request_id = {id}""".format(status=new_status, schema=schema, updated=updated, id=id)
+            cur.execute(SQL)
+    conn.commit()
+
+def submit_error(error_dict, conn, schema):
+    request_id = error_dict['request_id']
+    error_type = error_dict['error_type']
+    error_message = str(error_dict['error_message']).replace("'",'"')
+
+    if 'timestamp_iso' in error_dict:
+        error_time = error_dict['timestamp_iso']
+    else:
+        error_time = datetime.datetime.now().isoformat()
+
+    with conn.cursor() as cur:
+        SQL = """INSERT INTO {schema}.data_request_errors (request_id, error_time, error_type, error_message) VALUES ({request_id}, '{error_time}', '{error_type}', '{error_message}')""".format(schema=schema, request_id=request_id, error_time=error_time, error_type=error_type, error_message=error_message)
+        cur.execute(SQL)
     conn.commit()
 
 
+def create_wrds_sql_query(library='comp', table='company', columns='*', conditions=None, custom_condition='', distinct=False, no_observations=-1, offset=0):
+    """Libary options: libary=['fundq', 'funda', 'company']"""
+    if distinct:
+        dis = ' DISTINCT '
+    else:
+        dis = ''
+    if no_observations < 0:
+        obsstmt = ''
+    else:
+        obsstmt = 'LIMIT {}'.format(no_observations)
+    if columns is None:
+        cols = '*'
+    else:
+        cols = ','.join(columns)
+    if conditions is None:
+        cond = ' '
+    else:
+        cond = 'WHERE'
+        if custom_condition != '':
+            cond = cond + ' ' + custom_condition + ' AND'
+        for key in conditions:
+            if type(conditions[key]) == list:
+                cond = cond + ' ' + key + ' in (' + str(conditions[key])[1:-1] + ') AND'
+            elif type(conditions[key]) == str:
+                cond = cond + ' ' + key + " = '" + str(conditions[key]) + "' AND"
+            elif type(conditions[key]) == int or type(conditions[key]) == float:
+                cond = cond + ' ' + key + " = " + str(conditions[key]) + " AND"
+            else:
+                raise Exception('Unknown data type of condition.')
+        cond = cond[:-3]
+
+    sql = ("SELECT{distinct} {cols} FROM {schema}.{table} {condition} {obsstmt} OFFSET {offset};".format(cols=cols, distinct=dis, schema=library, table=table, condition=cond, obsstmt=obsstmt, offset=offset))
+    return sql
 
 
 
