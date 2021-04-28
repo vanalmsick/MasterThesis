@@ -18,10 +18,10 @@ import helpers as my
 
 
 def download_data_from_sql(data_version='default', recache=False):
-    query = "SELECT * FROM selected_data WHERE report_type = 'FQ'"
+    query = "SELECT * FROM final_data"
     cache_folder = "cache/" + str(data_version) + '/'
 
-    param_dic = my.get_credentials(credential='local_databases')['reuters']
+    param_dic = my.get_credentials(credential='aws')
 
     if not os.path.exists(cache_folder):
         os.makedirs(cache_folder)
@@ -32,7 +32,7 @@ def download_data_from_sql(data_version='default', recache=False):
 
         with my.postgresql_connect(param_dic) as conn:
             df = pd.read_sql_query(query, con=conn)
-            df.drop(columns=['tr_revenue_date', 'tr_bsperiodenddate', 'report_type', 'request_id', 'last_updated'], inplace=True)
+            #df.drop(columns=['tr_revenue_date', 'tr_bsperiodenddate', 'report_type', 'request_id', 'last_updated'], inplace=True)
             df.to_csv((cache_folder + 'raw_data.csv'), index=False)
         print('Raw data cached.')
 
@@ -93,6 +93,8 @@ def normalize_data(df, exclude_cols=[]):
     data_mean = df[normalize_col_list].mean()
     data_std = df[normalize_col_list].std()
     df[normalize_col_list] = (df[normalize_col_list] - data_mean) / data_std
+    # ToDo: Handle std = 0 -> divide / 0 => nan
+    df = df.fillna(0)
     normalization_param = {'mean': data_mean, 'std': data_std}
     return df, normalization_param
 
@@ -246,10 +248,10 @@ def feature_engineering(path):
     raw_data = pd.read_csv(path)
     raw_data.fillna(0, inplace=True)
 
-    raw_data['period_date'] = pd.to_datetime(raw_data['period_date'], format='%Y-%m-%d')
+    #raw_data['period_date'] = pd.to_datetime(raw_data['period_date'], format='%Y-%m-%d')
 
-    raw_data['qrt_sin'] = raw_data['period_quarter'].map({1.0:1, 2.0:0, 3.0:-1, 4.0:0})
-    raw_data['qrt_cos'] = raw_data['period_quarter'].map({1.0: 0, 2.0: -1, 3.0: 0, 4.0: 1})
+    raw_data['qrt_sin'] = raw_data['period_qrt'].map({1.0:1, 2.0:0, 3.0:-1, 4.0:0})
+    raw_data['qrt_cos'] = raw_data['period_qrt'].map({1.0: 0, 2.0: -1, 3.0: 0, 4.0: 1})
 
     return raw_data
 
@@ -258,12 +260,12 @@ if __name__ == '__main__':
     my.convenience_settings()
     data_version = 'default'
     recache = False
-    iter_col = ['period_year', 'period_quarter']
+    iter_col = ['period_year', 'period_qrt']
     history_size = 4*4
     target_size = 4
     y_col = 'tr_f_ebit'
-    drop_cols = ['period_date']
-    batch_sep_col = 'stock'
+    drop_cols = ['ric', 'curcdq', 'rp', 'updq', 'iid', 'exchg', 'costat', 'fic', 'srcq', 'curncdq', 'acctsdq']
+    batch_sep_col = 'gvkey'
 
     ### run tensorboard
     tracking_address = my.get_project_directories(key='tensorboard_logs')
@@ -275,23 +277,26 @@ if __name__ == '__main__':
     os.mkdir(tracking_address)
 
 
-    cache_folder = "prediction/cache/" + str(data_version) + '/'
+    cache_folder = "cache/" + str(data_version) + '/'
     download_data_from_sql(data_version=data_version, recache=recache)
 
     raw_data = feature_engineering(path=(cache_folder + 'raw_data.csv'))
+    data_types = raw_data.columns.to_series().groupby(raw_data.dtypes).groups
+    print('Columns dtypes:', data_types)
 
     data = data_iterator(df=raw_data, iter_col=iter_col, history_size=history_size, target_size=target_size)
     for partial_data in data:
-        min_date = partial_data['period_date'].min().strftime('%y-%m')
-        max_date = partial_data['period_date'].max().strftime('%y-%m')
+        min_date = '{}-{}'.format(*partial_data.index.min())
+        max_date = '{}-{}'.format(*partial_data.index.max())
         period = min_date + '_' + max_date
         print(period)
 
-        normalized_data, normalization_param = normalize_data(df=partial_data, exclude_cols=['period_date'])
+        normalized_data, normalization_param = normalize_data(df=partial_data, exclude_cols=([batch_sep_col] + iter_col + drop_cols))
         data_splitted = split_data(df=normalized_data, batch_sep_col=batch_sep_col, history_size=history_size, target_size=target_size, y_col=y_col, drop_cols=drop_cols)
 
+        input_layer_shape = normalized_data.shape[1] - len(drop_cols) - 1
         linear = tf.keras.Sequential([
-                                    tf.keras.layers.LSTM(117, return_sequences=True),
+                                    tf.keras.layers.LSTM(input_layer_shape, return_sequences=True),
                                     tf.keras.layers.Dense(target_size * 1, kernel_initializer=tf.initializers.zeros()),
                                     tf.keras.layers.Dense(target_size)
                                     ])
@@ -308,5 +313,5 @@ if __name__ == '__main__':
         print("predictions shape:", predictions.shape)
 
         plot(y_hist=tf.gather(data_splitted['test']['y_hist'], example_comps), y_pred=predictions, y_true=tf.gather(data_splitted['test']['y'], example_comps), y_name=y_col, normalization_param=normalization_param, examples=example_comps)
-        raise Excption('fghj')
+        #raise Excption('fghj')
 

@@ -83,7 +83,7 @@ def get_data():
                         df['task_id'] = row['task_id']
                         df['report_type'] = properties['FRQ']
                         if first_item:
-                            my.create_sql_tbl(df, conn=aws_conn, tbl_name='reuters.data_statements')
+                            my.create_sql_tbl(df, conn=aws_conn, tbl_name='data_statements', schema='reuters')
                             first_item = False
                         my.df_insert_sql(conn=aws_conn, df=df, table='reuters.data_statements')
                         my.update_request_status(request_id=request_id, conn=aws_conn, schema='reuters', new_status=1)
@@ -112,7 +112,7 @@ def get_data():
                             df['task_id'] = row['task_id']
                             df['report_type'] = row['req_table']
                             if first_item:
-                                my.create_sql_tbl(df, conn=aws_conn, tbl_name='wrds.data_statements')
+                                my.create_sql_tbl(df, conn=aws_conn, tbl_name='data_statements', schema='wrds')
                                 first_item = False
                             my.df_insert_sql(conn=aws_conn, df=df, table='wrds.data_statements')
                             my.update_request_status(request_id=request_id, conn=aws_conn, schema='wrds', new_status=1)
@@ -130,6 +130,7 @@ def get_data():
 
 
 if __name__ == '__main__':
+    my.convenience_settings()
     get_data()
 
     print('Everything done! No Open ToDos left.')
