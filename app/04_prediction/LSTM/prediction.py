@@ -6,6 +6,7 @@ import tensorflow as tf
 import datetime as dt
 import shutil, time, math
 import matplotlib.pyplot as plt
+import sklearn.decomposition
 
 
 ### Add other shared functions ###
@@ -18,7 +19,7 @@ import helpers as my
 
 
 def download_data_from_sql(data_version='default', recache=False):
-    query = "SELECT * FROM final_data"
+    query = "SELECT * FROM final_data_2"
     cache_folder = "cache/" + str(data_version) + '/'
 
     param_dic = my.get_credentials(credential='aws')
@@ -71,8 +72,8 @@ class data_iterator:
             self.data.set_index(iter_col, inplace=True)
         self.data.sort_index(inplace=True)
         self.iter_list = list(np.unique(self.data.index.values))
-        self.lower_idx = list(range(0, len(self.iter_list) - history_size - (target_size * 2) + 1, steps))
-        self.upper_idx = list(range(history_size + (target_size * 2) - 1, len(self.iter_list), steps))
+        self.lower_idx = list(range(0, len(self.iter_list) - history_size - (target_size) + 1, steps))
+        self.upper_idx = list(range(history_size + (target_size) - 1, len(self.iter_list), steps))
 
     def __iter__(self):
         return self
@@ -86,15 +87,18 @@ class data_iterator:
             raise StopIteration
 
 
-def normalize_data(df, exclude_cols=[]):
+def normalize_data(df_imp, exclude_cols=[], category_cols=[]):
     # ToDo: Ln Normalization??? Outliers?
-    df = df.copy()
+    df = df_imp.copy()
     normalize_col_list = [i for i in df.columns.tolist() if pd.api.types.is_numeric_dtype(df[i]) and i not in exclude_cols]
     data_mean = df[normalize_col_list].mean()
     data_std = df[normalize_col_list].std()
     df[normalize_col_list] = (df[normalize_col_list] - data_mean) / data_std
     # ToDo: Handle std = 0 -> divide / 0 => nan
     df = df.fillna(0)
+    for col in category_cols:
+        tmp = pd.get_dummies(df_imp[col], dummy_na=True, drop_first=True, prefix=str(col))
+        df = pd.concat([df, tmp], axis=1)
     normalization_param = {'mean': data_mean, 'std': data_std}
     return df, normalization_param
 
@@ -146,7 +150,7 @@ def split_data(df, batch_sep_col='stock', history_size=4*2, target_size=4*2, val
     X_val = []
     y_val_hist = []
     y_val = []
-    for idx in val_batch:
+    for i, idx in np.ndenumerate(val_batch):
         X_tmp = train_val_data[train_val_data[batch_sep_col] == idx][X_cols]
         if X_tmp.shape[0] == (history_size + target_size):
             y_tmp = train_val_data[train_val_data[batch_sep_col] == idx][y_col]
@@ -184,8 +188,76 @@ def split_data(df, batch_sep_col='stock', history_size=4*2, target_size=4*2, val
 
 
 
+def split_data2(df, batch_sep_col='stock', history_size=4*2, target_size=4*2, y_col='tr_f_ebit', drop_cols=[], shuffle=True):
+    copy_df = df.copy()
+    copy_df[batch_sep_col] = copy_df[batch_sep_col].astype("category")
+    drop_cols = drop_cols + [batch_sep_col]
 
-def compile_and_fit(model, X_train, y_train, X_val=None, y_val=None, patience=250, model_name='UNKNOWN', MAX_EPOCHS=20):
+    # Seperate Train and Validation data randomly
+    batch_col_list = np.array(copy_df[batch_sep_col].unique())
+    if shuffle:
+        np.random.seed(42)
+        np.random.shuffle(batch_col_list)
+
+    date_list = np.unique(copy_df.index.values)
+    date_list.sort()
+    if len(date_list) != history_size + target_size * 3:
+        raise Exception('Unexpected date length of data.')
+
+    X_cols = [i for i in copy_df.columns.tolist() if i not in drop_cols]
+
+    # Training data
+    X_train = []
+    y_train_hist = []
+    y_train = []
+    # Validation data
+    X_val = []
+    y_val_hist = []
+    y_val = []
+    # test data
+    X_test = []
+    y_test_hist = []
+    y_test = []
+    for idx in batch_col_list:
+        X_tmp = copy_df[copy_df[batch_sep_col] == idx][X_cols]
+        if X_tmp.shape[0] == (history_size + target_size*3):
+            y_tmp = copy_df[copy_df[batch_sep_col] == idx][y_col]
+            # Train
+            y_train.append(np.atleast_2d(np.array(y_tmp))[:, -target_size*3:-target_size*2])
+            y_train_hist.append(np.atleast_2d(np.array(y_tmp))[:, :-target_size*3])
+            X_train.append(np.array(X_tmp)[:-target_size*3, :])
+            # Val
+            y_val.append(np.atleast_2d(np.array(y_tmp))[:, -target_size*2:-target_size])
+            y_val_hist.append(np.atleast_2d(np.array(y_tmp))[:, target_size:-target_size*2])
+            X_val.append(np.array(X_tmp)[target_size:-target_size*2, :])
+            # test
+            y_test.append(np.atleast_2d(np.array(y_tmp))[:, -target_size:])
+            y_test_hist.append(np.atleast_2d(np.array(y_tmp))[:, target_size*2:-target_size])
+            X_test.append(np.array(X_tmp)[target_size*2:-target_size, :])
+    X_train = tf.stack(X_train)
+    y_train_hist = tf.stack(y_train_hist)
+    y_train = tf.stack(y_train)
+    X_val = tf.stack(X_val)
+    y_val_hist = tf.stack(y_val_hist)
+    y_val = tf.stack(y_val)
+    X_test = tf.stack(X_test)
+    y_test_hist = tf.stack(y_test_hist)
+    y_test = tf.stack(y_test)
+
+
+    out_data = {'train': {'X':X_train, 'y':y_train, 'y_hist':y_train_hist},
+                'val': {'X':X_val, 'y':y_val, 'y_hist':y_val_hist},
+                'test': {'X':X_test, 'y':y_test, 'y_hist':y_test_hist}}
+
+
+    return out_data
+
+
+
+
+
+
+def compile_and_fit(model, X_train, y_train, X_val=None, y_val=None, patience=410, model_name='UNKNOWN', MAX_EPOCHS=50):
     tracking_address = my.get_project_directories(key='tensorboard_logs')
     TBLOGDIR = tracking_address + "/" + model_name
 
@@ -244,8 +316,9 @@ def plot(y_hist, y_pred, y_true, normalization_param, y_name='tr_f_ebit', model_
     plt.show()
 
 
-def feature_engineering(path):
+def feature_engineering(path, category_cols=['gsector']):
     raw_data = pd.read_csv(path)
+
     raw_data.fillna(0, inplace=True)
 
     #raw_data['period_date'] = pd.to_datetime(raw_data['period_date'], format='%Y-%m-%d')
@@ -264,7 +337,8 @@ if __name__ == '__main__':
     history_size = 4*4
     target_size = 4
     y_col = 'tr_f_ebit'
-    drop_cols = ['ric', 'curcdq', 'rp', 'updq', 'iid', 'exchg', 'costat', 'fic', 'srcq', 'curncdq', 'acctsdq']
+    category_cols = ['gsector']
+    drop_cols = ['ric', 'curcdq', 'rp', 'updq', 'iid', 'exchg', 'costat', 'fic', 'srcq', 'curncdq', 'acctsdq', 'acctstdq', 'ggroup'] + category_cols
     batch_sep_col = 'gvkey'
 
     ### run tensorboard
@@ -281,24 +355,31 @@ if __name__ == '__main__':
     download_data_from_sql(data_version=data_version, recache=recache)
 
     raw_data = feature_engineering(path=(cache_folder + 'raw_data.csv'))
+    raw_data.set_index(iter_col, inplace=True)
     data_types = raw_data.columns.to_series().groupby(raw_data.dtypes).groups
     print('Columns dtypes:', data_types)
 
-    data = data_iterator(df=raw_data, iter_col=iter_col, history_size=history_size, target_size=target_size)
+    data = data_iterator(df=raw_data.loc[(2010.0,1.0):(2018.0,5.0)], iter_col='index', history_size=history_size, target_size=target_size*3)
     for partial_data in data:
         min_date = '{}-{}'.format(*partial_data.index.min())
         max_date = '{}-{}'.format(*partial_data.index.max())
         period = min_date + '_' + max_date
         print(period)
 
-        normalized_data, normalization_param = normalize_data(df=partial_data, exclude_cols=([batch_sep_col] + iter_col + drop_cols))
-        data_splitted = split_data(df=normalized_data, batch_sep_col=batch_sep_col, history_size=history_size, target_size=target_size, y_col=y_col, drop_cols=drop_cols)
+        normalized_data, normalization_param = normalize_data(df_imp=partial_data, exclude_cols=([batch_sep_col] + iter_col + drop_cols + ['qrt_sin', 'qrt_cos']), category_cols=category_cols)
+        #data_splitted = split_data(df=normalized_data, batch_sep_col=batch_sep_col, history_size=history_size, target_size=target_size, y_col=y_col, drop_cols=drop_cols)  # date_iterator target_size=2
+        data_splitted = split_data2(df=normalized_data, batch_sep_col=batch_sep_col, history_size=history_size, target_size=target_size, y_col=y_col, drop_cols=drop_cols)  # date_iterator target_size=3
 
         input_layer_shape = normalized_data.shape[1] - len(drop_cols) - 1
         linear = tf.keras.Sequential([
+                                    #tf.keras.layers.Dense(int(input_layer_shape*0.75)),
+                                    #tf.keras.layers.Dropout(rate=0.2),
                                     tf.keras.layers.LSTM(input_layer_shape, return_sequences=True),
-                                    tf.keras.layers.Dense(target_size * 1, kernel_initializer=tf.initializers.zeros()),
-                                    tf.keras.layers.Dense(target_size)
+                                    #tf.keras.layers.LSTM(int(input_layer_shape*0.75), return_sequences=False),
+                                    #tf.keras.layers.Dropout(rate=0.2),
+                                    #tf.keras.layers.LSTM(input_layer_shape, return_sequences=True),
+                                    #tf.keras.layers.Dense(target_size * 1, kernel_initializer=tf.initializers.ones()),
+                                    tf.keras.layers.Dense(target_size * 1, kernel_initializer=tf.initializers.zeros())
                                     ])
 
         history = compile_and_fit(X_train=data_splitted['train']['X'], y_train=data_splitted['train']['y'], X_val=data_splitted['val']['X'], y_val=data_splitted['val']['y'], model=linear, MAX_EPOCHS=5000, model_name=('LSTM_' + period))
@@ -313,5 +394,5 @@ if __name__ == '__main__':
         print("predictions shape:", predictions.shape)
 
         plot(y_hist=tf.gather(data_splitted['test']['y_hist'], example_comps), y_pred=predictions, y_true=tf.gather(data_splitted['test']['y'], example_comps), y_name=y_col, normalization_param=normalization_param, examples=example_comps)
-        #raise Excption('fghj')
+        raise Excption('fghj')
 

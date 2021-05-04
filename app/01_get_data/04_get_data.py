@@ -50,10 +50,10 @@ def get_data():
     reuters_todos.set_index('request_id', inplace=True)
     wrds_todos.set_index('request_id', inplace=True)
 
-    max_reuters_id = 0 if np.isnan(reuters_todos.index.max()) else reuters_todos.index.max()
-    max_wrds_id = 0 if np.isnan(wrds_todos.index.max()) else wrds_todos.index.max()
+    len_todos = len(reuters_todos) + len(wrds_todos)
+    j = 0
 
-    if (max_wrds_id + max_reuters_id) != 0:
+    if (len(reuters_todos) + len(wrds_todos)) != 0:
 
         # Progressbar to see hwo long it will still take
         print('\nGetting Data from Reuters and WRDS and save it:')
@@ -64,7 +64,7 @@ def get_data():
                    progressbar.Bar('█'), ' (',
                    progressbar.ETA(), ') ',
                    ]
-        progress_bar = progressbar.ProgressBar(max_value=(max_reuters_id + max_wrds_id), widgets=widgets).start()
+        progress_bar = progressbar.ProgressBar(max_value=len_todos, widgets=widgets).start()
 
         with my.postgresql_connect(aws_param) as aws_conn:
 
@@ -85,7 +85,7 @@ def get_data():
                         if first_item:
                             my.create_sql_tbl(df, conn=aws_conn, tbl_name='data_statements', schema='reuters')
                             first_item = False
-                        my.df_insert_sql(conn=aws_conn, df=df, table='reuters.data_statements')
+                        my.df_insert_sql(conn=aws_conn, df=df, table='reuters.data_statements', schema='reuters')
                         my.update_request_status(request_id=request_id, conn=aws_conn, schema='reuters', new_status=1)
                     else:
                         # repot error
@@ -95,7 +95,8 @@ def get_data():
                         max_len = min(len(err['error_message']), 40)
                         warnings.warn('Reuters request {} returned an {}-Error with the message: {}'.format(request_id, err['error_type'], err['error_message'][:max_len]))
 
-                    progress_bar.update(request_id)
+                    j += 1
+                    progress_bar.update(j)
 
 
             if len(wrds_todos) > 0:
@@ -110,11 +111,13 @@ def get_data():
                             # push df
                             df['request_id'] = request_id
                             df['task_id'] = row['task_id']
-                            df['report_type'] = row['req_table']
+                            if row['target_table'] == 'data_statements':
+                                df['report_type'] = row['req_table']
                             if first_item:
-                                my.create_sql_tbl(df, conn=aws_conn, tbl_name='data_statements', schema='wrds')
+                                my.create_sql_tbl(df, conn=aws_conn, tbl_name=row['target_table'], schema='wrds')
                                 first_item = False
-                            my.df_insert_sql(conn=aws_conn, df=df, table='wrds.data_statements')
+                            if len(df) > 0:
+                                my.df_insert_sql(conn=aws_conn, df=df, table=row['target_table'], schema='wrds')
                             my.update_request_status(request_id=request_id, conn=aws_conn, schema='wrds', new_status=1)
                         else:
                             # repot error
@@ -124,7 +127,8 @@ def get_data():
                             max_len = min(len(err['error_message']), 40)
                             warnings.warn('Reuters request {} returned an {}-Error with the message: {}'.format(request_id, err['error_type'], err['error_message'][:max_len]))
 
-                        progress_bar.update((max_reuters_id + request_id))
+                        j += 1
+                        progress_bar.update(j)
 
 
 

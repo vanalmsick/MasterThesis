@@ -149,7 +149,7 @@ def sql_query(sql, conn):
     return pd.read_sql_query(sql, conn)
 
 
-def df_insert_sql(conn, df, table):
+def df_insert_sql(conn, df, table, schema='public'):
     """
     Using psycopg2.extras.execute_values() to insert the dataframe
     """
@@ -164,7 +164,7 @@ def df_insert_sql(conn, df, table):
     # Comma-separated dataframe columns
     cols = ','.join(df.columns.tolist())
     # SQL quert to execute
-    query  = "INSERT INTO %s(%s) VALUES %%s" % (table, cols)
+    query  = "INSERT INTO %s.%s (%s) VALUES %%s" % (schema, table, cols)
     cursor = conn.cursor()
     try:
         psycopg2.extras.execute_values(cursor, query, tuples)
