@@ -30,11 +30,12 @@ def get_project_directories(key=None, **kwargs):
     app_path = os.path.dirname(helpers_path)
     project_path = os.path.dirname(app_path)
     data_path = os.path.join(project_path, 'data')
+    cache_path = os.path.join(project_path, 'cache')
     credentials_path = os.path.join(project_path, 'credentials')
     working_dir = os.getcwd()
     tensorboard_logs = '/Users/vanalmsick/opt/anaconda3/envs/dev/lib/python3.8/site-packages/tensorboard/logs'
 
-    dir_dict = {'project_dir': project_path, 'app_dir': app_path, 'data_dir': data_path, 'cred_dir':credentials_path, 'helpers_dir': helpers_path, 'working_dir': working_dir, 'tensorboard_logs':tensorboard_logs}
+    dir_dict = {'project_dir': project_path, 'app_dir': app_path, 'data_dir': data_path, 'cred_dir':credentials_path, 'helpers_dir': helpers_path, 'working_dir': working_dir, 'tensorboard_logs':tensorboard_logs, 'cache_dir':cache_path}
 
     if key is None:
         return dir_dict
