@@ -137,3 +137,4 @@ credentials/
 /cache/
 !example_key.ini
 !example_api_key.key
+*.sql

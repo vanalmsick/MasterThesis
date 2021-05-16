@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import psycopg2, psycopg2.extras
 import configparser
+from silx.io import dictdump
 
 
 ######################################### GENERAL #########################################
@@ -240,6 +241,39 @@ def create_wrds_sql_query(library='comp', table='company', columns='*', conditio
     sql = ("SELECT{distinct} {cols} FROM {schema}.{table} {condition} {obsstmt} OFFSET {offset};".format(cols=cols, distinct=dis, schema=library, table=table, condition=cond, obsstmt=obsstmt, offset=offset))
     return sql
 
+
+
+class custom_hdf5:
+    def dict_to_hdf5(file, save_dict):
+        create_ds_args = {'compression': "gzip", 'fletcher32': True}
+        dictdump.dicttoh5(save_dict, file, h5path="/", mode='w', create_dataset_args=create_ds_args)
+        #dictdump.dicttoh5(save_dict, file, h5path="/", mode='w')
+
+
+    def hdf5_to_dict(file, *args):
+        hdf_path = '/' + '/'.join(args[:-1])
+        out = dictdump.h5todict(file, hdf_path)
+        out = out[args[-1]]
+        return out
+
+    def hdf5_to_pd(file, *args):
+        my_dict = custom_hdf5.hdf5_to_dict(file, *args)
+        pd_ser = pd.Series(dict(zip(my_dict[0, :].astype(str), my_dict[1, :].astype(float))))
+        return pd_ser
+
+    def pd_series_to_2d_array(pd_series):
+        np_array = np.array([pd_series.index.values.astype(str), pd_series.values.astype(float)])
+        return np_array
+
+    def get_comp_list(file, norm_key):
+        import h5py
+        with h5py.File(file, 'r') as f:
+            a = list(f.get(norm_key).keys())
+        try:
+            a.remove('__all__')
+        except:
+            pass
+        return a
 
 
 
