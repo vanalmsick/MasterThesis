@@ -60,6 +60,8 @@ class data_prep:
         self.comps_exclude = []
         self.comps_just_these = False
 
+        self.lagged_col_dict = {}
+
         self.computed = False
 
 
@@ -98,17 +100,7 @@ class data_prep:
 
 
 
-
-    def _split_df_comp(self, df):
-        # Split  by company
-        companies = np.array(df[self.props['company_col']].unique()).tolist()
-        comp_dict = {}
-        for comp in companies:
-            tmp_df = df[df[self.props['company_col']] == comp].sort_index()
-            comp_dict[comp] = tmp_df[[i for i in self.columns if i != self.props['company_col']]]
-        return comp_dict
-
-    def _dummy_vars(self):
+    def _transform_dummy_vars(self):
         cat_cols = self.raw_data.select_dtypes(include=['object', 'category']).columns.tolist()
         df = self.raw_data.copy()
         dummy_dict = {}
@@ -119,65 +111,6 @@ class data_prep:
         self.data = df.drop(columns=cat_cols)
         self.dummy_col_dict = dummy_dict
 
-
-    #############################################################
-
-
-    def feature_filter(self, include_features_list=None, exclude_features_list=None):
-        pass
-
-    def column_filter(self, include_features_list=None, exclude_features_list=None):
-        self.feature_filter(include_features_list=include_features_list, exclude_features_list=exclude_features_list)
-
-    def company_filter(self, include_comp_list=None, exclude_comp_list=None):
-        pass
-
-
-    #############################################################
-
-
-    def normalize(self, method='year', keep_raw_feature=[]):
-        # per 'block': all data in train
-        # per 'time'/'time-step': per time-step across all companies
-        # per 'set'/'company-time-set': per single data-set -> per company in every time-step
-        if not hasattr(self, 'split_method'):
-            raise Exception('Please first apply test_train_split before normalize!')
-
-        self.norm_keep_raw = keep_raw_feature
-
-        if method == 'block':
-            if self.split_method == 'single_time_rolling':
-                raise Exception('Combination of single_time_rolling split and block normalization not possible!')
-            self.normalize_method = 'block'
-        elif method == 'time' or method == 'time-step':
-            self.normalize_method = 'time-step'
-        elif method == 'set' or method == 'company-time-set':
-            self.normalize_method = 'set'
-        else:
-            raise Exception(f'UNKNOWN method={method} for normalization. Possible are: block / time / set.')
-
-    #############################################################
-
-    def window(self, input_width=5*4, pred_width=4, shift=1):
-        self.window_input_width = input_width
-        self.window_pred_width = pred_width
-        self.window_shift = shift
-
-    #############################################################
-
-    def block_static_split(self, val_comp_size=0, test_comp_size=0, val_time_size=0.2, test_time_size=0.1, shuffle=True):
-        self.split_method = 'block_static'
-        self.split_props = {'val_comp_size': val_comp_size, 'test_comp_size': test_comp_size, 'val_time_size': val_time_size, 'test_time_size': test_time_size, 'shuffle': shuffle}
-
-
-    def block_rolling_split(self, val_comp_size=0, test_comp_size=0, train_time_steps=4, val_time_steps=1, test_time_steps=1, shuffle=True):
-        self.split_method = 'block_rolling'
-        self.split_props = {'val_comp_size': val_comp_size, 'test_comp_size': test_comp_size, 'train_time_steps': train_time_steps, 'val_time_steps': val_time_steps, 'test_time_steps': test_time_steps, 'shuffle': shuffle}
-
-
-    def single_time_rolling(self, val_time_steps=1, test_time_steps=1, shuffle=True):
-        self.split_method = 'single_time_rolling'
-        self.split_props = {'train_time_steps': 1, 'val_time_steps': val_time_steps, 'test_time_steps': test_time_steps, 'shuffle': shuffle}
 
 
     #############################################################
@@ -214,27 +147,8 @@ class data_prep:
         return train_df, val_df, test_df
 
 
-    def _rolling_window_list(self, idx_list, start, end, raw=False):
-        idx_len = len(idx_list)
-        input_width = self.window_input_width
-        pred_width = self.window_pred_width
-        shift = self.window_shift
-        window_len = input_width + pred_width
 
-        idx_lower = list(range(start, end - window_len + 2, shift))
-        idx_upper = list(range(start + window_len - 1, end + 1, shift))
-
-        if raw:
-            window_list = [(i, j) for i, j in zip(idx_lower, idx_upper)]
-        else:
-            window_list = [(idx_list[i], idx_list[j]) for i, j in zip(idx_lower, idx_upper)]
-
-        return window_list
-
-
-
-
-    def _get_block_rolling_window(self, idx_col, hist_periods_in_block=4, val_time_steps=1, test_time_steps=1, subpress_warning=False):
+    def _get_idx_dict_block_rolling_window(self, idx_col, hist_periods_in_block=4, val_time_steps=1, test_time_steps=1, subpress_warning=False):
         hist_periods_in_block = self.window_input_width + hist_periods_in_block - 1
         if hist_periods_in_block == self.window_input_width and subpress_warning is False:
             warnings.warn('You are effectivly using single_time_rolling because the hist_periods_in_block is equal to the window_input_width!')
@@ -254,9 +168,9 @@ class data_prep:
 
         idx_dict = {}
         for lower, upper in zip(idx_lower, idx_upper):
-            train_list = self._rolling_window_list(idx_list=idx_list, start=lower, end=(upper - pred_width - pred_width - val_time_steps - test_time_steps + 1) + 1)
-            val_list = self._rolling_window_list(idx_list=idx_list, start=(upper - sample_len - test_time_steps - pred_width - val_time_steps + 3), end=(upper - pred_width - test_time_steps + 1))
-            test_list = self._rolling_window_list(idx_list=idx_list, start=(upper - sample_len - test_time_steps + 2), end=upper)
+            train_list = self._all_rolling_windows_in_block(idx_list=idx_list, start=lower, end=(upper - pred_width - pred_width - val_time_steps - test_time_steps + 1) + 1)
+            val_list = self._all_rolling_windows_in_block(idx_list=idx_list, start=(upper - sample_len - test_time_steps - pred_width - val_time_steps + 3), end=(upper - pred_width - test_time_steps + 1))
+            test_list = self._all_rolling_windows_in_block(idx_list=idx_list, start=(upper - sample_len - test_time_steps + 2), end=upper)
             all_list = [(i[0], j[1]) for i, j in zip(train_list, test_list)]
 
             tmp_dict = {'__all__': all_list,
@@ -267,7 +181,30 @@ class data_prep:
 
         return idx_dict
 
-    def _get_normalization_param(self, df, idx_lower, idx_upper, i=0):
+
+
+    def _all_rolling_windows_in_block(self, idx_list, start, end, raw=False):
+        idx_len = len(idx_list)
+        input_width = self.window_input_width
+        pred_width = self.window_pred_width
+        shift = self.window_shift
+        window_len = input_width + pred_width
+
+        idx_lower = list(range(start, end - window_len + 2, shift))
+        idx_upper = list(range(start + window_len - 1, end + 1, shift))
+
+        if raw:
+            window_list = [(i, j) for i, j in zip(idx_lower, idx_upper)]
+        else:
+            window_list = [(idx_list[i], idx_list[j]) for i, j in zip(idx_lower, idx_upper)]
+
+        return window_list
+
+
+
+
+
+    def _normalization_multicore_function(self, df, idx_lower, idx_upper, i=0):
         relevant_cols = [i for i in df.columns.tolist() if (i not in [item for sublist in self.dummy_col_dict.values() for item in sublist])]
         norm_cols = [i for i in relevant_cols if (i not in self.dataset_iter_col) and (i != self.dataset_company_col)]
         df = df[relevant_cols]
@@ -294,7 +231,7 @@ class data_prep:
 
         return norm_param
 
-    def _normalization(self, df, idx_dict):
+    def _get_normalization_param(self, df, idx_dict):
         norm_get = {}
         for _, time_dict in idx_dict.items():
             for i, j in time_dict['train']:
@@ -323,7 +260,7 @@ class data_prep:
 
         # Multi-Core Multiprocessing
         p = multiprocessing.Pool(processes=num_workers)
-        data = p.starmap(self._get_normalization_param, input_data_pairs)
+        data = p.starmap(self._normalization_multicore_function, input_data_pairs)
         p.close()
 
         norm_param_dict = dict(zip(list(norm_get.keys()), data))
@@ -342,21 +279,10 @@ class data_prep:
         return hash
 
 
-    def _transform_df_to_output_array(self, df, y_cols, pred_len):
-        df.sort_index(inplace=True)
-        idx_list = df.index.uniquq().tolist()
-        idx_X = idx_list[:-pred_len]
-        idx_y = idx_list[-pred_len:]
 
-        X = df.loc[idx_X].values
-        y = df[y_cols].loc[idx_y].values
-
-        return X, y
-
-
-    def compute(self, companies='__all__'):
+    def compute(self):
         # Raise warnings for stupid data combinations
-        if self.split_method == 'single_time_rolling' and companies != '__all__':
+        if self.split_method == 'single_time_rolling' and 'ToDo: REPLACE TEST' != '__all__':
             warnings.warn('Having a rolling window and single_company results in ONE TRAINING SET per time which is stupid!')
 
 
@@ -367,7 +293,7 @@ class data_prep:
         self.cols = self.raw_data.columns.tolist()
 
         # Transform categorical variables to dummy
-        self._dummy_vars()
+        self._transform_dummy_vars()
 
         cache_folder = my.get_project_directories(key='cache_dir')
         if not os.path.exists(cache_folder):
@@ -392,14 +318,14 @@ class data_prep:
 
 
 
-        cache_hash = self._get_data_hash(self.dataset, self.data.index.unique().tolist(), self.window_input_width, self.window_pred_width, self.window_shift, hist_periods_in_block, val_time_steps, test_time_steps)
+        cache_hash = self._get_data_hash(self.dataset, self.data.index.unique().tolist(), self.window_input_width, self.window_pred_width, self.window_shift, hist_periods_in_block, val_time_steps, test_time_steps, self.lagged_col_dict)
         norm_cache_file = os.path.join(cache_folder, f'norm_parm_{cache_hash}.hdf5')
         iter_cache_file = os.path.join(cache_folder, f'iter_dict_{cache_hash}.pkl')
 
         if self.recache or not os.path.exists(norm_cache_file):
 
-            idx_dict = self._get_block_rolling_window(idx_col=self.data.index, hist_periods_in_block=hist_periods_in_block, val_time_steps=val_time_steps, test_time_steps=test_time_steps)
-            norm_dict = self._normalization(df=self.data, idx_dict=idx_dict)
+            idx_dict = self._get_idx_dict_block_rolling_window(idx_col=self.data.index, hist_periods_in_block=hist_periods_in_block, val_time_steps=val_time_steps, test_time_steps=test_time_steps)
+            norm_dict = self._get_normalization_param(df=self.data, idx_dict=idx_dict)
 
             print('\nDumping cache to file for next use...')
             pickle.dump(idx_dict, open(iter_cache_file, 'wb'))
@@ -424,7 +350,8 @@ class data_prep:
         print('Data class skeleton constructed (computed)! Ready to iterate across or subscript...')
 
 
-    def _prep_data(self, df, norm_mean, norm_std):
+
+    def _prep_final_dataset(self, df, norm_mean, norm_std):
         df = df.copy()
 
         sort_cols = self.dataset_iter_col + [self.dataset_company_col]
@@ -461,9 +388,7 @@ class data_prep:
 
 
 
-
-
-    def _get_data(self, train_dict, val_dict, test_dict, iter_step, data_hash):
+    def _final_dataset(self, train_dict, val_dict, test_dict, iter_step, data_hash):
 
         final_data_cache_folder = os.path.join(my.get_project_directories(key='cache_dir'), data_hash)
         if not os.path.exists(final_data_cache_folder):
@@ -541,7 +466,7 @@ class data_prep:
 
                     df_set = self.data[(self.data.index >= lower) & (self.data.index <= upper) & (self.data[self.dataset_company_col] == comp)]
                     if len(df_set) > 0:
-                        X, y, warning = self._prep_data(df=df_set, norm_mean=mean, norm_std=std)
+                        X, y, warning = self._prep_final_dataset(df=df_set, norm_mean=mean, norm_std=std)
                         warning_list.append(warning) if warning is not None else None
                         if X_tmp_col_compare != False:
                             if X_tmp_col_compare != X.columns.tolist():
@@ -587,7 +512,7 @@ class data_prep:
 
                     df_set = self.data[(self.data.index >= lower) & (self.data.index <= upper) & (self.data[self.dataset_company_col] == comp)]
                     if len(df_set) > 0:
-                        X, y, warning = self._prep_data(df=df_set, norm_mean=mean, norm_std=std)
+                        X, y, warning = self._prep_final_dataset(df=df_set, norm_mean=mean, norm_std=std)
                         warning_list.append(warning) if warning is not None else None
 
                         if X_tmp_col_compare != X.columns.tolist():
@@ -628,7 +553,7 @@ class data_prep:
 
                     df_set = self.data[(self.data.index >= lower) & (self.data.index <= upper) & (self.data[self.dataset_company_col] == comp)]
                     if len(df_set) > 0:
-                        X, y, warning = self._prep_data(df=df_set, norm_mean=mean, norm_std=std)
+                        X, y, warning = self._prep_final_dataset(df=df_set, norm_mean=mean, norm_std=std)
                         warning_list.append(warning) if warning is not None else None
 
                         if X_tmp_col_compare != X.columns.tolist():
@@ -677,7 +602,7 @@ class data_prep:
 
     def __next__(self):
         current = next(self._custom_iter_)
-        train_np, val_np, test_np = self._get_data(train_dict=current['train'], val_dict=current['val'], test_dict=current['test'])
+        train_np, val_np, test_np = self._final_dataset(train_dict=current['train'], val_dict=current['val'], test_dict=current['test'])
         #if self.current < self.high:
         #    return self.current
         #raise StopIteration
@@ -691,7 +616,7 @@ class data_prep:
     def __getitem__(self, obj):
         if type(obj) == int:
             obj = list(self.iter_idx)[obj]
-        data_dict = self._get_data(train_dict=self.iter_dict[obj]['train'], val_dict=self.iter_dict[obj]['val'], test_dict=self.iter_dict[obj]['test'], iter_step=obj, data_hash=self.data_hash)
+        data_dict = self._final_dataset(train_dict=self.iter_dict[obj]['train'], val_dict=self.iter_dict[obj]['val'], test_dict=self.iter_dict[obj]['test'], iter_step=obj, data_hash=self.data_hash)
         return data_dict
 
     def __len__(self):
@@ -713,6 +638,37 @@ class data_prep:
 
     def details(self):
         print('\n' + self.__str__() + '\n')
+
+
+    def help(self):
+        a = "\n\nTo use this data prep class please use the following steps:\n" \
+            "-------------------------------------------------------------\n" \
+            "## Define what dataset to use:\n" \
+            "data = data_prep(dataset='final_data_2', recache=False, keep_raw_cols='default', drop_cols='default')\n" \
+            "\n" \
+            "## Define the data window with historical input length/period number, prediction length and step shift:\n" \
+            "data.window(input_width=5*4, pred_width=4, shift=1)\n" \
+            "\n" \
+            "## Define the split between train/val/test. There are three methods avalable:\n" \
+            "# - block_static_split(): data divided by percent into three static blocks -> just one dataset\n" \
+            "# - block_rolling_split(): data divided by fixed number of periods rolling acoss entire dataset -> iterable & subscriptable\n" \
+            "# - single_time_rolling(): just one train/val/test period/window in dataset -> iterable & subscriptable\n" \
+            "data.block_rolling_split(val_comp_size=0, test_comp_size=0, train_time_steps=5*4*2, val_time_steps=1, test_time_steps=1, shuffle=True)\n" \
+            "\n" \
+            "## Normalize the date (three normalization levels avalable: [entire dataset] block / [across all comps per] time-step / [per company-time] set)\n" \
+            "data.normalize(method='time')\n" \
+            "\n" \
+            "## Get data by either: (if block_static_split just method c avalable)\n" \
+            "# a) for i in data:\n" \
+            "# b) data['199503_201301']\n" \
+            "# c) data.get_data()\n" \
+            "\n" \
+            "## Finally you can apply column and company filters:\n" \
+            "data.column_filter(include_features_list=None, exclude_features_list=None)\n" \
+            "data.company_filter(include_comp_list=None, exclude_comp_list=None)\n" \
+            "\n\n"
+        print(a)
+
 
 
     def export_to_excel(self, path=None):
@@ -747,6 +703,97 @@ class data_prep:
 
 
 
+    #############################################################
+
+
+    def lagged_variables(self, lagged_col_dict={'tr_f_ebit': [-1, -2, -3, -4]}):
+        self.computed = False
+        self.lagged_col_dict = lagged_col_dict
+
+
+    #############################################################
+
+
+    def window(self, input_width=5*4, pred_width=4, shift=1):
+        self.computed = False
+        self.window_input_width = input_width
+        self.window_pred_width = pred_width
+        self.window_shift = shift
+
+
+    #############################################################
+
+
+    def block_static_split(self, val_comp_size=0, test_comp_size=0, val_time_size=0.2, test_time_size=0.1, shuffle=True):
+        self.computed = False
+        self.split_method = 'block_static'
+        self.split_props = {'val_comp_size': val_comp_size, 'test_comp_size': test_comp_size,
+                            'val_time_size': val_time_size, 'test_time_size': test_time_size, 'shuffle': shuffle}
+
+    def block_rolling_split(self, val_comp_size=0, test_comp_size=0, train_time_steps=4, val_time_steps=1,
+                            test_time_steps=1, shuffle=True):
+        self.computed = False
+        self.split_method = 'block_rolling'
+        self.split_props = {'val_comp_size': val_comp_size, 'test_comp_size': test_comp_size,
+                            'train_time_steps': train_time_steps, 'val_time_steps': val_time_steps,
+                            'test_time_steps': test_time_steps, 'shuffle': shuffle}
+
+    def single_time_rolling(self, val_time_steps=1, test_time_steps=1, shuffle=True):
+        self.computed = False
+        self.split_method = 'single_time_rolling'
+        self.split_props = {'train_time_steps': 1, 'val_time_steps': val_time_steps,
+                            'test_time_steps': test_time_steps, 'shuffle': shuffle}
+
+
+    #############################################################
+
+    def normalize(self, method='year', keep_raw_feature=[]):
+        # per 'block': all data in train
+        # per 'time'/'time-step': per time-step across all companies
+        # per 'set'/'company-time-set': per single data-set -> per company in every time-step
+        self.computed = False
+        if not hasattr(self, 'split_method'):
+            raise Exception('Please first apply test_train_split before normalize!')
+
+        self.norm_keep_raw = keep_raw_feature
+
+        if method == 'block':
+            if self.split_method == 'single_time_rolling':
+                raise Exception('Combination of single_time_rolling split and block normalization not possible!')
+            self.normalize_method = 'block'
+        elif method == 'time' or method == 'time-step':
+            self.normalize_method = 'time-step'
+        elif method == 'set' or method == 'company-time-set':
+            self.normalize_method = 'set'
+        else:
+            raise Exception(f'UNKNOWN method={method} for normalization. Possible are: block / time / set.')
+
+
+    #############################################################
+    ### After compute ###
+
+    def feature_filter(self, include_features_list=None, exclude_features_list=None):
+        pass
+
+    def column_filter(self, include_features_list=None, exclude_features_list=None):
+        self.feature_filter(include_features_list=include_features_list, exclude_features_list=exclude_features_list)
+
+    def company_filter(self, include_comp_list=None, exclude_comp_list=None):
+        if self.normalize_method == 'block':
+            warnings.warn('You set a company filter but normalize across the entire block including all companies. The company filter is not applied to the normalization.')
+            self.computed = False
+        pass
+
+    #############################################################
+
+
+
+
+
+
+
+
+
 
 
 
@@ -772,8 +819,10 @@ if __name__ == '__main__':
 
     data.compute()
 
-    out = data['199503_201301']
-    data.export_to_excel()
+    data.help()
+
+    #out = data['199503_201301']
+    #data.export_to_excel()
 
     print(data)
 
