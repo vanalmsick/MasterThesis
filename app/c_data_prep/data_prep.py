@@ -67,6 +67,7 @@ class data_prep:
 
     def _get_raw_data(self):
         df, self.raw_file_path = _download_data_from_sql(data_version=self.dataset, recache=self.recache)
+        df = df.fillna(df.mean())
 
         dataset_pops = {'final_data':   {'iter_col': ['period_year', 'period_qrt'], 'company_col': 'gvkey', 'y_col': ['tr_f_ebit'], 'category_cols': ['gsector', 'ggroup'], 'date_cols': []},
                         'final_data_2': {'iter_col': ['period_year', 'period_qrt'], 'company_col': 'gvkey', 'y_col': ['tr_f_ebit'], 'category_cols': ['gsector', 'ggroup'], 'date_cols': []}}
@@ -204,7 +205,7 @@ class data_prep:
 
 
 
-    def _normalization_multicore_function(self, df, idx_lower, idx_upper, i=0):
+    def _normalization_multicore_function(self, df, idx_lower, idx_upper):
         relevant_cols = [i for i in df.columns.tolist() if (i not in [item for sublist in self.dummy_col_dict.values() for item in sublist])]
         norm_cols = [i for i in relevant_cols if (i not in self.dataset_iter_col) and (i != self.dataset_company_col)]
         df = df[relevant_cols]
@@ -227,8 +228,6 @@ class data_prep:
             tmp_std_np = my.custom_hdf5.pd_series_to_2d_array(pd_series=tmp_std)
             norm_param[f'c_{comp}'] = {'mean': tmp_mean_np, 'std': tmp_std_np}
 
-        print(f' {i}', end='')
-
         return norm_param
 
     def _get_normalization_param(self, df, idx_dict):
@@ -240,33 +239,14 @@ class data_prep:
 
         print('\nCaching indices/iterators and normalization parameters:')
 
-        import multiprocessing
-
-        max_i = len(norm_get)
-        num_workers = multiprocessing.cpu_count()
-
         input_data_pairs = []
         i = 1
         for key, idx in norm_get.items():
-            input_data_pairs.append((df, idx[0], idx[1], i))
+            input_data_pairs.append((df, idx[0], idx[1]))
             i += 1
 
-        start = datetime.datetime.now()
-
-        print(f'Multiprocessing with {num_workers} simultaneous processes. Start time {start.strftime("%H:%M:%S")}')
-        print(f'Out of {max_i} tasks these are done:', end='')
-
-
-
-        # Multi-Core Multiprocessing
-        p = multiprocessing.Pool(processes=num_workers)
-        data = p.starmap(self._normalization_multicore_function, input_data_pairs)
-        p.close()
-
+        data = my.multiprocessing_func_with_progressbar(func=self._normalization_multicore_function, argument_list=input_data_pairs, num_processes=-1)
         norm_param_dict = dict(zip(list(norm_get.keys()), data))
-        end = datetime.datetime.now()
-
-        print(f'\nIndices/iterators and normalization parameters cached. Needed {int((end-start).seconds/60)}:{int((end-start).seconds%60)} mins with end time {end.strftime("%H:%M:%S")}')
 
         return norm_param_dict
 
@@ -327,11 +307,10 @@ class data_prep:
             idx_dict = self._get_idx_dict_block_rolling_window(idx_col=self.data.index, hist_periods_in_block=hist_periods_in_block, val_time_steps=val_time_steps, test_time_steps=test_time_steps)
             norm_dict = self._get_normalization_param(df=self.data, idx_dict=idx_dict)
 
-            print('\nDumping cache to file for next use...')
+            print('\nDumping cache to file for next use... (takes a bit because huge file and is being compressed)')
             pickle.dump(idx_dict, open(iter_cache_file, 'wb'))
             my.custom_hdf5.dict_to_hdf5(file=norm_cache_file, save_dict=norm_dict)
             del norm_dict
-
             print('Iterators/indices and normalization parameters cached.')
 
         else:
@@ -344,47 +323,86 @@ class data_prep:
         self.norm_param_file = norm_cache_file
 
         self.data_hash = cache_hash
-
         self.computed = True
 
         print('Data class skeleton constructed (computed)! Ready to iterate across or subscript...')
 
 
 
-    def _prep_final_dataset(self, df, norm_mean, norm_std):
-        df = df.copy()
+    def _prep_final_dataset(self, df, norm_key=None, lower_idx=None, upper_idx=None, comp=None, norm_method=None):
+        if type(df) != list:
+            df = [(df, norm_key, lower_idx, upper_idx, comp, norm_method)]
 
-        sort_cols = self.dataset_iter_col + [self.dataset_company_col]
-        df.sort_values(sort_cols, inplace=True)
+        X = []
+        y = []
+        idx = []
+        warning = []
 
-        warning = None
-        if len(df) > (self.window_input_width + self.window_pred_width):
-            warning = [str(df[self.dataset_company_col].unique().tolist())[1:-1], df.index.min(), df.index.max(), (f'Company {str(df[self.dataset_company_col].unique().tolist())[1:-1]} has data duplicates in time_step {df.index.min()}-{df.index.max()}')]
-            df = df.drop_duplicates(subset=sort_cols, keep='last')
+        if norm_method == 'block':
+            mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, '__all__', 'mean')
+            std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, '__all__', 'std')
 
-        cols = self.cols
+        final_cols = False
+        last_norm_key = False
+        last_comp = False
 
-        if self.cols_just_these == False:
-            final_cols = [i for i in cols if (i not in self.cols_drop) and (i not in self.dataset_iter_col) and (i != self.dataset_company_col) and (i not in self.dataset_date_cols)]
-        else:
-            if type(self.cols_just_these) != list:
-                raise Exception('cols_just_these has to be a list of column names')
-            final_cols = [i for i in self.cols_just_these if (i not in self.dataset_iter_col) and (i != self.dataset_company_col) and (i not in self.dataset_date_cols)]
+        for df, norm_key, lower_idx, upper_idx, comp, norm_method in df:
+            tmp_df = self.data[(self.data.index >= lower_idx) & (self.data.index <= upper_idx) & (self.data[self.dataset_company_col] == comp)]
 
-        norm_cols = [i for i in df.columns.tolist() if (i in final_cols) and (i not in self.norm_keep_raw)]
-        df[norm_cols] = (df[norm_cols] - norm_mean[norm_cols].fillna(0)) / norm_std[norm_cols].fillna(1)
+            if len(tmp_df) > 0:
+                df = tmp_df.copy()
 
-        for key, value in self.dummy_col_dict.items():
-            try:
-                final_cols.remove(key)
-                final_cols.extend(value)
-            except:
-                pass
+                if norm_method == 'time-step':
+                    if norm_key != last_norm_key:
+                        mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, '__all__', 'mean')
+                        std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, '__all__', 'std')
+                        last_norm_key = norm_key
+                elif norm_method == 'set':
+                    if norm_key != last_norm_key or comp != last_comp:
+                        mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, f'c_{comp}', 'mean')
+                        std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, f'c_{comp}', 'std')
+                        last_norm_key = norm_key
+                        last_comp = comp
 
-        X = pd.DataFrame(df.iloc[:-self.window_pred_width][final_cols])
-        y = pd.DataFrame(df.iloc[-self.window_pred_width:][self.dataset_y_col])
 
-        return X, y, warning
+                sort_cols = self.dataset_iter_col + [self.dataset_company_col]
+                df.sort_values(sort_cols, inplace=True)
+
+                if len(df) > (self.window_input_width + self.window_pred_width):
+                    warning.append([str(df[self.dataset_company_col].unique().tolist())[1:-1], df.index.min(), df.index.max(), (f'Company {str(df[self.dataset_company_col].unique().tolist())[1:-1]} has data duplicates in time_step {df.index.min()}-{df.index.max()}')])
+                    df = df.drop_duplicates(subset=sort_cols, keep='last')
+                if len(df) != (self.window_input_width + self.window_pred_width):
+                    warning.append([str(df[self.dataset_company_col].unique().tolist())[1:-1], df.index.min(), df.index.max(), (f'Company {str(df[self.dataset_company_col].unique().tolist())[1:-1]} has too few time points in time_step {df.index.min()}-{df.index.max()}')])
+                else:
+
+                    if final_cols == False:
+                        cols = self.cols
+                        if self.cols_just_these == False:
+                            final_cols = [i for i in cols if (i not in self.cols_drop) and (i not in self.dataset_iter_col) and (i != self.dataset_company_col) and (i not in self.dataset_date_cols)]
+                        else:
+                            if type(self.cols_just_these) != list:
+                                raise Exception('cols_just_these has to be a list of column names')
+                            final_cols = [i for i in self.cols_just_these if (i not in self.dataset_iter_col) and (i != self.dataset_company_col) and (i not in self.dataset_date_cols)]
+
+                        norm_cols = [i for i in df.columns.tolist() if (i in final_cols) and (i not in self.norm_keep_raw)]
+
+                        for key, value in self.dummy_col_dict.items():
+                            try:
+                                final_cols.remove(key)
+                                final_cols.extend(value)
+                            except:
+                                pass
+
+
+                    df[norm_cols] = (df[norm_cols] - mean[norm_cols].fillna(0)) / std[norm_cols].fillna(1)
+
+                    X.append(pd.DataFrame(df.iloc[:-self.window_pred_width][final_cols]).values)
+                    y.append(pd.DataFrame(df.iloc[-self.window_pred_width:][self.dataset_y_col]).values)
+                    idx.append([norm_key, lower_idx, upper_idx, comp])
+            else:
+                warning.append([str(df[self.dataset_company_col].unique().tolist())[1:-1], df.index.min(), df.index.max(), (f'Company {str(df[self.dataset_company_col].unique().tolist())[1:-1]} has no data in time_step {df.index.min()}-{df.index.max()}')])
+
+        return X, y, idx, [final_cols], warning
 
 
 
@@ -417,36 +435,17 @@ class data_prep:
             print('Got data from cached file.')
 
         else:
-            if self.normalize_method == 'block':
-                mean = 0
-                std = 1
 
-            # Progressbar to see hwo long it will still take
-            print(f'\nCaching, normalizing, and preparing data for iteration-step {iter_step}:')
-            time.sleep(0.5)
-            widgets = ['[',
-                       progressbar.Timer(format='elapsed: %(elapsed)s'),
-                       '] ',
-                       progressbar.Bar('█'), ' (',
-                       progressbar.ETA(), ') ',
-                       ]
-            progress_bar = progressbar.ProgressBar(max_value=((len(self.companies) - len(self.comps_exclude)) * (len(train_dict) + len(val_dict) + len(test_dict)) if self.comps_just_these == False else (len(train_dict) + len(val_dict) + len(test_dict)) * len(self.comps_just_these)), widgets=widgets).start()
-
-            warning_list = []
+            start = time.time()
 
             ##################### TRAIN #####################
 
-            train_X = []
-            train_y = []
-            train_idx = []
-            i = 0
+            train_todo_list = []
+            norm_level = self.normalize_method
+
+
             for lower, upper in train_dict:
                 norm_key = f't_{lower}_{upper}'
-
-                if self.normalize_method == 'time-step':
-                    mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, '__all__', 'mean')
-                    std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, '__all__', 'std')
-
                 comp_iter_list = my.custom_hdf5.get_comp_list(file=self.norm_param_file, norm_key=norm_key)
                 if self.comps_just_these == False:
                     comp_iter_list = [i for i in comp_iter_list if (i not in self.comps_exclude) and (i != '__all__')]
@@ -454,126 +453,93 @@ class data_prep:
                     if type(self.comps_just_these) != list:
                         raise Exception('comp_iter_list has to be a list of column names')
                     comp_iter_list = self.comps_just_these
-
-
-                X_tmp_col_compare = False
-                y_tmp_col_compare = False
                 for comp in comp_iter_list:
                     comp = type(self.data[self.dataset_company_col].iloc[0])(comp[2:])
-                    if self.normalize_method == 'set':
-                        mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, f'c_{comp}', 'mean')
-                        std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, f'c_{comp}', 'std')
-
-                    df_set = self.data[(self.data.index >= lower) & (self.data.index <= upper) & (self.data[self.dataset_company_col] == comp)]
-                    if len(df_set) > 0:
-                        X, y, warning = self._prep_final_dataset(df=df_set, norm_mean=mean, norm_std=std)
-                        warning_list.append(warning) if warning is not None else None
-                        if X_tmp_col_compare != False:
-                            if X_tmp_col_compare != X.columns.tolist():
-                                raise Exception(f'X columns are not identical across company iteration.\nGot: [{X.columns.tolist()}]\nExpected: [{X_tmp_col_compare}]')
-                            if y_tmp_col_compare != y.columns.tolist():
-                                raise Exception(f'Y columns are not identical across company iteration.\nGot: [{y.columns.tolist()}]\nExpected: [{y_tmp_col_compare}]')
-                        else:
-                            X_tmp_col_compare = X.columns.tolist()
-                            y_tmp_col_compare = y.columns.tolist()
+                    train_todo_list.append((self.data, norm_key, lower, upper, comp, norm_level))
 
 
-                        if len(X) == self.window_input_width and len(y) == self.window_pred_width:
-                            train_X.append(X.values)
-                            train_y.append(y.values)
-                            train_idx.append([comp, lower, upper])
-                    i += 1
-                    progress_bar.update(i)
+            n = 750
+            train_todo_list_of_list = [train_todo_list[i:i + n] for i in range(0, len(train_todo_list), n)]
+
+            print(f'\nCaching, normalizing, and preparing train data for iteration-step/subscript {iter_step}:')
+            train_X, train_y, train_idx, train_col_list, train_warning_list = my.multiprocessing_func_with_progressbar(func=self._prep_final_dataset, argument_list=train_todo_list_of_list, num_processes=-1, results='extend')
+
 
             train_X = np.asarray(train_X)
             train_y = np.asarray(train_y)
             train_idx = np.asarray(train_idx)
+            if all(elem == train_col_list[0] for elem in train_col_list) is False:
+                raise Exception('Not all parts in train have the same columns!')
 
 
 
             ##################### VAL #####################
 
-            val_X = []
-            val_y = []
-            val_idx = []
+            val_todo_list = []
+
             for lower, upper in val_dict:
                 norm_key = f't_{lower}_{upper}'
-
-                if self.normalize_method == 'time-step':
-                    mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, '__all__', 'mean')
-                    std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, '__all__', 'std')
-
-
+                comp_iter_list = my.custom_hdf5.get_comp_list(file=self.norm_param_file, norm_key=norm_key)
+                if self.comps_just_these == False:
+                    comp_iter_list = [i for i in comp_iter_list if (i not in self.comps_exclude) and (i != '__all__')]
+                else:
+                    if type(self.comps_just_these) != list:
+                        raise Exception('comp_iter_list has to be a list of column names')
+                    comp_iter_list = self.comps_just_these
                 for comp in comp_iter_list:
                     comp = type(self.data[self.dataset_company_col].iloc[0])(comp[2:])
-                    if self.normalize_method == 'set':
-                        mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, f'c_{comp}', 'mean')
-                        std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, f'c_{comp}', 'std')
+                    val_todo_list.append((self.data, norm_key, lower, upper, comp, norm_level))
 
-                    df_set = self.data[(self.data.index >= lower) & (self.data.index <= upper) & (self.data[self.dataset_company_col] == comp)]
-                    if len(df_set) > 0:
-                        X, y, warning = self._prep_final_dataset(df=df_set, norm_mean=mean, norm_std=std)
-                        warning_list.append(warning) if warning is not None else None
+            n_min = min(n, int(len(val_todo_list) / 7))
+            val_todo_list_of_list = [val_todo_list[i:i + n_min] for i in range(0, len(val_todo_list), n_min)]
 
-                        if X_tmp_col_compare != X.columns.tolist():
-                            raise Exception(f'X columns are not identical across company iteration.\nGot: [{X.columns.tolist()}]\nExpected: [{X_tmp_col_compare}]')
-                        if y_tmp_col_compare != y.columns.tolist():
-                            raise Exception(f'Y columns are not identical across company iteration.\nGot: [{y.columns.tolist()}]\nExpected: [{y_tmp_col_compare}]')
-
-
-                        if len(X) == self.window_input_width and len(y) == self.window_pred_width:
-                            val_X.append(X.values)
-                            val_y.append(y.values)
-                            val_idx.append([comp, lower, upper])
-                    i += 1
-                    progress_bar.update(i)
+            print(f'\nCaching, normalizing, and preparing validation data for iteration-step/subscript {iter_step}:')
+            val_X, val_y, val_idx, val_col_list, val_warning_list = my.multiprocessing_func_with_progressbar(func=self._prep_final_dataset, argument_list=val_todo_list_of_list, num_processes=-1, results='extend')
 
             val_X = np.asarray(val_X)
             val_y = np.asarray(val_y)
             val_idx = np.asarray(val_idx)
+            if all(elem == val_col_list[0] for elem in val_col_list) is False:
+                raise Exception('Not all parts in validation have the same columns!')
+            if val_col_list[0] != train_col_list[0]:
+                raise Exception('Columns in validation are not equalt to train.')
 
 
             ##################### TEST #####################
 
-            test_X = []
-            test_y = []
-            test_idx = []
+            test_todo_list = []
+
             for lower, upper in test_dict:
                 norm_key = f't_{lower}_{upper}'
-
-                if self.normalize_method == 'time-step':
-                    mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, '__all__', 'mean')
-                    std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, '__all__', 'std')
-
+                comp_iter_list = my.custom_hdf5.get_comp_list(file=self.norm_param_file, norm_key=norm_key)
+                if self.comps_just_these == False:
+                    comp_iter_list = [i for i in comp_iter_list if (i not in self.comps_exclude) and (i != '__all__')]
+                else:
+                    if type(self.comps_just_these) != list:
+                        raise Exception('comp_iter_list has to be a list of column names')
+                    comp_iter_list = self.comps_just_these
                 for comp in comp_iter_list:
                     comp = type(self.data[self.dataset_company_col].iloc[0])(comp[2:])
-                    if self.normalize_method == 'set':
-                        mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, f'c_{comp}', 'mean')
-                        std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, f'c_{comp}', 'std')
+                    test_todo_list.append((self.data, norm_key, lower, upper, comp, norm_level))
 
-                    df_set = self.data[(self.data.index >= lower) & (self.data.index <= upper) & (self.data[self.dataset_company_col] == comp)]
-                    if len(df_set) > 0:
-                        X, y, warning = self._prep_final_dataset(df=df_set, norm_mean=mean, norm_std=std)
-                        warning_list.append(warning) if warning is not None else None
+            n_min = min(n, int(len(test_todo_list)/7))
+            test_todo_list_of_list = [test_todo_list[i:i + n_min] for i in range(0, len(test_todo_list), n_min)]
 
-                        if X_tmp_col_compare != X.columns.tolist():
-                            raise Exception(f'X columns are not identical across company iteration.\nGot: [{X.columns.tolist()}]\nExpected: [{X_tmp_col_compare}]')
-                        if y_tmp_col_compare != y.columns.tolist():
-                            raise Exception(f'Y columns are not identical across company iteration.\nGot: [{y.columns.tolist()}]\nExpected: [{y_tmp_col_compare}]')
-
-                        if len(X) == self.window_input_width and len(y) == self.window_pred_width:
-                            test_X.append(X.values)
-                            test_y.append(y.values)
-                            test_idx.append([comp, lower, upper])
-                    i += 1
-                    progress_bar.update(i)
+            print(f'\nCaching, normalizing, and preparing test data for iteration-step/subscript {iter_step}:')
+            test_X, test_y, test_idx, testcol_list, test_warning_list = my.multiprocessing_func_with_progressbar(func=self._prep_final_dataset, argument_list=test_todo_list_of_list, num_processes=-1, results='extend')
 
             test_X = np.asarray(test_X)
             test_y = np.asarray(test_y)
             test_idx = np.asarray(test_idx)
+            if all(elem == testcol_list[0] for elem in testcol_list) is False:
+                raise Exception('Not all parts in validation have the same columns!')
+            if testcol_list[0] != train_col_list[0]:
+                raise Exception('Columns in test are not equal to train and validation.')
 
-            ndarray_columns = {'X': dict(zip(range(len(X_tmp_col_compare)), X_tmp_col_compare)),
-                               'y': dict(zip(range(len(y_tmp_col_compare)), y_tmp_col_compare))}
+            warning_list = train_warning_list + val_warning_list + test_warning_list
+
+            ndarray_columns = {'X': dict(zip(range(len(train_col_list[0])), train_col_list[0])),
+                               'y': dict(zip(range(len(self.dataset_y_col)), self.dataset_y_col))}
             pickle.dump(ndarray_columns, open((final_file[:-4] + '_cols.pkl'), 'wb'))
             warning_list = pd.DataFrame(warning_list, columns=["Company", "Lower IDX", "Upper IDX", "Message"])
             warning_list.drop_duplicates(keep='first', inplace=True, ignore_index=True)
@@ -581,7 +547,9 @@ class data_prep:
 
             np.savez_compressed(final_file, train_X=train_X, train_y=train_y, train_idx=train_idx, val_X=val_X, val_y=val_y, val_idx=val_idx, test_X=test_X, test_y=test_y, test_idx=test_idx)
 
-            print(f'\nData cached for iteration-step {iter_step}.')
+            end = time.time()
+
+            print(f'\nData cached for iteration-step {iter_step}. Took {int((end-start)/60)} min.')
 
 
         OUT = {'train': {'X': train_X, 'y': train_y, 'idx': train_idx},
@@ -624,6 +592,25 @@ class data_prep:
 
     #####################################
 
+
+    def tsds_dataset(self, out='all', out_dict=None, transpose_y=True):
+        if out_dict is None:
+            out_dict = self.latest_out
+        if out=='all':
+            out = ['train', 'val', 'test']
+        if type(out) != list:
+            out = list(out)
+        output = []
+        for i in out:
+            tmp_y = out_dict[i]['y']
+            if transpose_y:
+                tmp_y = tmp_y.reshape((-1, tmp_y.shape[2], tmp_y.shape[1]))
+            tmp = tf.data.Dataset.from_tensors((out_dict[i]['X'], tmp_y))
+            output.append(tmp)
+        return output
+
+
+
     def __str__(self):
         return f"Custom-Data class:\n" \
                f"Dataset: {self.dataset}\n" \
@@ -639,6 +626,8 @@ class data_prep:
     def details(self):
         print('\n' + self.__str__() + '\n')
 
+    def __help__(self):
+        self.help()
 
     def help(self):
         a = "\n\nTo use this data prep class please use the following steps:\n" \
@@ -819,9 +808,9 @@ if __name__ == '__main__':
 
     data.compute()
 
-    data.help()
 
-    #out = data['199503_201301']
+    out = data['199503_201301']
+    ds_train, ds_val, ds_test = data.tsds_dataset(out='all', out_dict=None)
     #data.export_to_excel()
 
     print(data)

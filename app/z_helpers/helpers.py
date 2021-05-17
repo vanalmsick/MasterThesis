@@ -6,6 +6,8 @@ import numpy as np
 import psycopg2, psycopg2.extras
 import configparser
 from silx.io import dictdump
+from tqdm import tqdm
+import multiprocessing
 
 
 ######################################### GENERAL #########################################
@@ -274,6 +276,50 @@ class custom_hdf5:
         except:
             pass
         return a
+
+
+
+def multiprocessing_func_with_progressbar(func, argument_list, num_processes=-1, results='append'):
+    if num_processes == -1:
+        num_processes = multiprocessing.cpu_count()
+    pool = multiprocessing.Pool(processes=num_processes)
+
+    jobs = [pool.apply_async(func=func, args=(*argument,)) if isinstance(argument, tuple) else pool.apply_async(func=func, args=(argument,)) for argument in argument_list]
+    pool.close()
+
+    list_a, list_b, list_c, list_d, list_e, list_f, list_g, list_h = [], [], [], [], [], [], [], []
+    list_of_lists = [list_a, list_b, list_c, list_d, list_e, list_f, list_g, list_h]
+
+    bar_format = '[elapsed: {elapsed} min] |{bar:50}| {percentage:3.0f}% - ETA: {remaining}  ({n_fmt}/{total_fmt} - {rate_fmt} - ' + str(num_processes) + ' simultaneous processes)'
+    for job in tqdm(jobs, bar_format=bar_format):
+        out = job.get()
+        if type(out) == tuple:
+            if len(out) > 8:
+                raise Exception('Please modify multiprocessing_func_with_progressbar function. Function is currently just able to handle max 8 retun arguments.')
+            for x, lst in zip(out, list_of_lists):
+                if results == 'append':
+                    lst.append(x)
+                elif results == 'extend':
+                    lst.extend(x)
+                else:
+                    raise Exception(f'Unknown input for results={results}. Valid arguments are append or extend.')
+        else:
+            if results == 'append':
+                list_a.append(out)
+            elif results == 'extend':
+                list_a.extend(out)
+            else:
+                raise Exception(f'Unknown input for results={results}. Valid arguments are append or extend.')
+
+    len_out = len(out) if type(out) == tuple else 1
+    out = tuple(list_of_lists[:len_out])
+
+    return out
+
+
+
+
+
 
 
 
