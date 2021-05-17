@@ -67,7 +67,6 @@ class data_prep:
 
     def _get_raw_data(self):
         df, self.raw_file_path = _download_data_from_sql(data_version=self.dataset, recache=self.recache)
-        df = df.fillna(df.mean())
 
         dataset_pops = {'final_data':   {'iter_col': ['period_year', 'period_qrt'], 'company_col': 'gvkey', 'y_col': ['tr_f_ebit'], 'category_cols': ['gsector', 'ggroup'], 'date_cols': []},
                         'final_data_2': {'iter_col': ['period_year', 'period_qrt'], 'company_col': 'gvkey', 'y_col': ['tr_f_ebit'], 'category_cols': ['gsector', 'ggroup'], 'date_cols': []}}
@@ -231,9 +230,14 @@ class data_prep:
         return norm_param
 
     def _get_normalization_param(self, df, idx_dict):
+        # ToDo: Check if Normalization is OOS
         norm_get = {}
         for _, time_dict in idx_dict.items():
             for i, j in time_dict['train']:
+                norm_get[f't_{i}_{j}'] = (i, j)
+            for i, j in time_dict['val']:
+                norm_get[f't_{i}_{j}'] = (i, j)
+            for i, j in time_dict['test']:
                 norm_get[f't_{i}_{j}'] = (i, j)
 
 
@@ -346,8 +350,13 @@ class data_prep:
         last_norm_key = False
         last_comp = False
 
+        tmp_df = self.data
+        # ToDo: Implement real NaN handling
+        tmp_df = tmp_df.fillna(tmp_df.mean().fillna(0))
+
+
         for df, norm_key, lower_idx, upper_idx, comp, norm_method in df:
-            tmp_df = self.data[(self.data.index >= lower_idx) & (self.data.index <= upper_idx) & (self.data[self.dataset_company_col] == comp)]
+            tmp_df = tmp_df[(tmp_df.index >= lower_idx) & (tmp_df.index <= upper_idx) & (tmp_df[self.dataset_company_col] == comp)]
 
             if len(tmp_df) > 0:
                 df = tmp_df.copy()
@@ -464,10 +473,15 @@ class data_prep:
             print(f'\nCaching, normalizing, and preparing train data for iteration-step/subscript {iter_step}:')
             train_X, train_y, train_idx, train_col_list, train_warning_list = my.multiprocessing_func_with_progressbar(func=self._prep_final_dataset, argument_list=train_todo_list_of_list, num_processes=-1, results='extend')
 
+            # ToDo: There are entire datasets with 500 tasks none resulting in long enough data
+            train_col_list = list(filter(None, train_col_list))
 
             train_X = np.asarray(train_X)
             train_y = np.asarray(train_y)
             train_idx = np.asarray(train_idx)
+            with open('train.txt', 'w') as f:
+                for i in train_col_list:
+                    f.write(str(i) + '\n')
             if all(elem == train_col_list[0] for elem in train_col_list) is False:
                 raise Exception('Not all parts in train have the same columns!')
 
@@ -496,9 +510,14 @@ class data_prep:
             print(f'\nCaching, normalizing, and preparing validation data for iteration-step/subscript {iter_step}:')
             val_X, val_y, val_idx, val_col_list, val_warning_list = my.multiprocessing_func_with_progressbar(func=self._prep_final_dataset, argument_list=val_todo_list_of_list, num_processes=-1, results='extend')
 
+            val_col_list = list(filter(None, val_col_list))
+
             val_X = np.asarray(val_X)
             val_y = np.asarray(val_y)
             val_idx = np.asarray(val_idx)
+            with open('val.txt', 'w') as f:
+                for i in val_col_list:
+                    f.write(str(i) + '\n')
             if all(elem == val_col_list[0] for elem in val_col_list) is False:
                 raise Exception('Not all parts in validation have the same columns!')
             if val_col_list[0] != train_col_list[0]:
@@ -526,14 +545,19 @@ class data_prep:
             test_todo_list_of_list = [test_todo_list[i:i + n_min] for i in range(0, len(test_todo_list), n_min)]
 
             print(f'\nCaching, normalizing, and preparing test data for iteration-step/subscript {iter_step}:')
-            test_X, test_y, test_idx, testcol_list, test_warning_list = my.multiprocessing_func_with_progressbar(func=self._prep_final_dataset, argument_list=test_todo_list_of_list, num_processes=-1, results='extend')
+            test_X, test_y, test_idx, test_col_list, test_warning_list = my.multiprocessing_func_with_progressbar(func=self._prep_final_dataset, argument_list=test_todo_list_of_list, num_processes=-1, results='extend')
+
+            test_col_list = list(filter(None, test_col_list))
 
             test_X = np.asarray(test_X)
             test_y = np.asarray(test_y)
             test_idx = np.asarray(test_idx)
-            if all(elem == testcol_list[0] for elem in testcol_list) is False:
+            with open('test.txt', 'w') as f:
+                for i in test_col_list:
+                    f.write(str(i) + '\n')
+            if all(elem == test_col_list[0] for elem in test_col_list) is False:
                 raise Exception('Not all parts in validation have the same columns!')
-            if testcol_list[0] != train_col_list[0]:
+            if test_col_list[0] != train_col_list[0]:
                 raise Exception('Columns in test are not equal to train and validation.')
 
             warning_list = train_warning_list + val_warning_list + test_warning_list
@@ -793,6 +817,14 @@ class data_prep:
 
 
 if __name__ == '__main__':
+    # ToDo: tfds data generator
+    # ToDo: data example/graph
+    # ToDo: shuffle data
+    # ToDo: add lagged variables
+    # ToDo: outlier normalization
+    # ToDo: rolling block step size of iteration
+    # ToDo: add block normalization
+
 
     data = data_prep(dataset='final_data_2', recache=False, keep_raw_cols='default', drop_cols='default')
 
@@ -809,7 +841,7 @@ if __name__ == '__main__':
     data.compute()
 
 
-    out = data['199503_201301']
+    out = data['200201_201903']
     ds_train, ds_val, ds_test = data.tsds_dataset(out='all', out_dict=None)
     #data.export_to_excel()
 

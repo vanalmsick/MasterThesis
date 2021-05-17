@@ -312,7 +312,10 @@ def multiprocessing_func_with_progressbar(func, argument_list, num_processes=-1,
                 raise Exception(f'Unknown input for results={results}. Valid arguments are append or extend.')
 
     len_out = len(out) if type(out) == tuple else 1
-    out = tuple(list_of_lists[:len_out])
+    if len_out == 1:
+        out = list_of_lists[0]
+    else:
+        out = tuple(list_of_lists[:len_out])
 
     return out
 
