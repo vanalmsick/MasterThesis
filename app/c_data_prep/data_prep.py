@@ -466,7 +466,7 @@ class data_prep:
                     comp = type(self.data[self.dataset_company_col].iloc[0])(comp[2:])
                     train_todo_list.append((self.data, norm_key, lower, upper, comp, norm_level))
 
-
+            train_todo_list = my.sort_list_of_sub(train_todo_list, sort_element=4)
             n = 750
             train_todo_list_of_list = [train_todo_list[i:i + n] for i in range(0, len(train_todo_list), n)]
 
@@ -504,6 +504,7 @@ class data_prep:
                     comp = type(self.data[self.dataset_company_col].iloc[0])(comp[2:])
                     val_todo_list.append((self.data, norm_key, lower, upper, comp, norm_level))
 
+            val_todo_list = my.sort_list_of_sub(val_todo_list, sort_element=4)
             n_min = min(n, int(len(val_todo_list) / 7))
             val_todo_list_of_list = [val_todo_list[i:i + n_min] for i in range(0, len(val_todo_list), n_min)]
 
@@ -541,6 +542,7 @@ class data_prep:
                     comp = type(self.data[self.dataset_company_col].iloc[0])(comp[2:])
                     test_todo_list.append((self.data, norm_key, lower, upper, comp, norm_level))
 
+            test_todo_list = my.sort_list_of_sub(test_todo_list, sort_element=4)
             n_min = min(n, int(len(test_todo_list)/7))
             test_todo_list_of_list = [test_todo_list[i:i + n_min] for i in range(0, len(test_todo_list), n_min)]
 
@@ -579,7 +581,9 @@ class data_prep:
         OUT = {'train': {'X': train_X, 'y': train_y, 'idx': train_idx},
                'val':   {'X': val_X,   'y': val_y,   'idx': val_idx},
                'test':  {'X': test_X,  'y': test_y,  'idx': test_idx},
-               'columns': ndarray_columns}
+               'columns': ndarray_columns,
+               'columns_lookup': {'X': dict(zip(list(ndarray_columns['X'].values()), list(ndarray_columns['X'].keys()))),
+                                  'y': dict(zip(list(ndarray_columns['y'].values()), list(ndarray_columns['y'].keys())))}}
         self.latest_out = OUT
         return OUT
 

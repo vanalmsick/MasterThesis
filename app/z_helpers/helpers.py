@@ -279,6 +279,19 @@ class custom_hdf5:
 
 
 
+def sort_list_of_sub(sub_li, sort_element=0):
+    l = len(sub_li)
+    for i in range(0, l):
+        for j in range(0, l-i-1):
+            if (sub_li[j][sort_element] > sub_li[j + 1][sort_element]):
+                tempo = sub_li[j]
+                sub_li[j]= sub_li[j + 1]
+                sub_li[j + 1]= tempo
+    return sub_li
+
+
+
+
 def multiprocessing_func_with_progressbar(func, argument_list, num_processes=-1, results='append'):
     if num_processes == -1:
         num_processes = multiprocessing.cpu_count()
@@ -333,7 +346,9 @@ if __name__ == '__main__':
     #print(get_credentials())
     #print(get_credentials('reuters_eikon_api'))
 
-    get_credentials()
+    #get_credentials()
+    print(test_b)
+    print(sort_list_of_sub(test_b, sort_element=1))
 
 
 
