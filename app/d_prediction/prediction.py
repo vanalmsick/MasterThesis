@@ -16,7 +16,7 @@ import c_data_prep as my_prep
 
 
 
-def compile_and_fit(model, train, val, X_train=None, y_train=None, X_val=None, y_val=None, patience=50, model_name='UNKNOWN', MAX_EPOCHS=50):
+def compile_and_fit(model, train, val, model_name='UNKNOWN', patience=50, MAX_EPOCHS=50):
     tracking_address = my_helpers.get_project_directories(key='tensorboard_logs')
     TBLOGDIR = tracking_address + "/" + model_name
 
@@ -30,95 +30,82 @@ def compile_and_fit(model, train, val, X_train=None, y_train=None, X_val=None, y
                                                           patience=patience,
                                                           mode='min',
                                                           restore_best_weights=True)
-        #training_history = model.fit(X_train, y_train, epochs=MAX_EPOCHS, validation_data=(X_val, y_val), callbacks=[early_stopping, tensorboard_callback])
-        training_history = model.fit_generator(train, epochs=MAX_EPOCHS, validation_data=val, callbacks=[early_stopping, tensorboard_callback])
+        training_history = model.fit(train, epochs=MAX_EPOCHS, validation_data=val, callbacks=[early_stopping, tensorboard_callback])
     else:
         early_stopping = tf.keras.callbacks.EarlyStopping(monitor='loss',
                                                           patience=patience,
                                                           mode='min',
                                                           restore_best_weights=True)
-        #training_history = model.fit(X_train, y_train, epochs=MAX_EPOCHS, callbacks=[early_stopping, tensorboard_callback])
         training_history = model.fit(train, epochs=MAX_EPOCHS, callbacks=[early_stopping, tensorboard_callback])
 
     return training_history
 
 
-def plot(y_hist, y_pred, y_true, normalization_param=None, y_name='tr_f_ebit', model_name='Model', examples=0):
-    scale = 1000000
 
-    if type(examples) != list:
-        examples = [examples]
+def plot(examples_dict, normalization=True):
 
-    plt.figure(figsize=(12, 3 * len(examples)))
+    color_codes = ['#ff7f0e', '#58D68D', '#F5B041', '#A569BD', '#40E0D0']
 
-    for i in range(len(examples)):
-        ex = examples[i]
+    examples_len = examples_dict['examples_num']
+    examples_comp = examples_dict['company'].tolist()
 
-        plt.subplot(len(examples), 1, i + 1)
-        plt.ylabel(f'{y_name} [example {ex}]')
+    y_hist = examples_dict['y_hist'].tolist()
+    y_true = examples_dict['y_true'].tolist()
 
-        if normalization_param is None:
-            mean = 0
-            str = 1
+    t_idx = examples_dict['t_idx']
+    time_steps = examples_dict['time_step']
+
+    y_pred = []
+    for i in range(examples_len):
+        tmp_dict = {}
+        for key, values in examples_dict['pred'].items():
+            tmp_data = examples_dict['pred'][key][i, -1, :].tolist()
+            tmp_dict[key] = tmp_data
+        y_pred.append(tmp_dict)
+
+
+    if len(examples_dict['pred']) > len(color_codes):
+        raise Exception('Too few color codes defined. Please extend color_codes list!')
+
+
+    plt.figure(figsize=(12, 3 * examples_len))
+
+    for i, time_step, comp, y_hist, y_true, t_idx, y_pred in zip(range(examples_len), time_steps, examples_comp, y_hist, y_true, t_idx, y_pred):
+        x_t = [int(str(i)[:-2]) + (int(str(i)[-2:]) / 4) for i in t_idx]
+
+        plt.subplot(examples_len, 1, i + 1)
+        plt.ylabel(f'comp {comp} [{i}]')
+
+        if normalization and 'norm_param' in examples_dict:
+            scale = 1000000
+            mean = examples_dict['norm_param'][i]['mean'][examples_dict['y_cols'][0]]
+            std = examples_dict['norm_param'][i]['std'][examples_dict['y_cols'][0]]
         else:
-            mean = normalization_param['mean'][y_name]
-            std = normalization_param['std'][y_name]
-        y_pred_real = np.array(y_pred[i, -1, :]) * std + mean
-        y_true_real = np.array(y_true[i, -1, :]) * std + mean
-        y_hist_real = np.array(y_hist[i, -1, :]) * std + mean
-        x_hist = [int(i) for i in list(range(0, len(y_hist_real)))]
-        x_pred = [int(i) for i in list(range(len(y_hist_real), len(y_hist_real) + len(y_true_real)))]
-        plt.plot(x_hist, (y_hist_real / scale), label='Historical', marker='.', zorder=-10)
-        plt.scatter(x_pred, (y_true_real / scale), edgecolors='k', label='True', c='#2ca02c', s=64)
-        plt.scatter(x_pred, (y_pred_real / scale), marker='X', edgecolors='k', label='Predictions (in-sample/test)', c='#ff7f0e', s=64)
-
-        if i == 0:
-            plt.legend()
-
-        xint = range(min(x_hist), math.ceil(max(x_pred)) + 1)
-        plt.xticks(xint)
-
-    plt.show()
-
-
-
-
-
-def plot2(y_hist, y_pred, y_true, normalization_param=None, y_name='tr_f_ebit', model_name='Model', examples=0):
-    scale = 1000000
-    scale = 1
-
-    if type(examples) != list:
-        examples = [examples]
-
-    plt.figure(figsize=(12, 3 * len(examples)))
-
-    for i in range(len(examples)):
-        ex = examples[i]
-
-        plt.subplot(len(examples), 1, i + 1)
-        plt.ylabel(f'{y_name} [example {ex}]')
-
-        if normalization_param is None:
+            scale = 1
             mean = 0
             std = 1
-        else:
-            mean = normalization_param['mean'][y_name]
-            std = normalization_param['std'][y_name]
-        y_pred_real = np.array(y_pred[i, -1, :]) * std + mean
-        y_true_real = np.array(y_true[i, :]) * std + mean
-        y_hist_real = np.array(y_hist[i, :]) * std + mean
-        x_hist = [int(i) for i in list(range(0, len(y_hist_real)))]
-        x_pred = [int(i) for i in list(range(len(y_hist_real), len(y_hist_real) + len(y_true_real)))]
+
+
+        y_true_real = np.array(y_true) * std + mean
+        y_hist_real = np.array(y_hist) * std + mean
+
+        x_true = x_t[-len(y_true_real):]
+        x_hist = x_t[:len(y_hist_real)]
+
         plt.plot(x_hist, (y_hist_real / scale), label='Historical', marker='.', zorder=-10)
-        plt.scatter(x_pred, (y_true_real / scale), edgecolors='k', label='True', c='#2ca02c', s=64)
-        plt.scatter(x_pred, (y_pred_real / scale), marker='X', edgecolors='k', label='Predictions (in-sample/test)', c='#ff7f0e', s=64)
+        plt.scatter(x_true, (y_true_real / scale), edgecolors='k', label='True', c='#2ca02c', s=64)
+
+        j = 0
+        for model, pred_y in y_pred.items():
+            y_pred_real = np.array(pred_y) * std + mean
+            plt.scatter(x_true[:len(y_pred_real)], (y_pred_real / scale), marker='X', edgecolors='k', label=f'{model} predictions', c=color_codes[j], s=64)
+            j += 1
 
         if i == 0:
             plt.legend()
 
-        xint = range(min(x_hist), math.ceil(max(x_pred)) + 1)
-        plt.xticks(xint)
+        #if i == examples_len - 1:
+        #    plt.xticks(x_t, rotation='vertical')
 
     plt.show()
 
@@ -127,8 +114,7 @@ def plot2(y_hist, y_pred, y_true, normalization_param=None, y_name='tr_f_ebit', 
 
 
 
-
-def main_run_baseline_models(train_ds, val_ds, test_ds, val_performance_dict, test_performance_dict):
+def main_run_baseline_models(train_ds, val_ds, test_ds, val_performance_dict, test_performance_dict, examples=None):
 
     class Baseline_last_value(tf.keras.Model):
         def __init__(self, label_index=None):
@@ -153,9 +139,15 @@ def main_run_baseline_models(train_ds, val_ds, test_ds, val_performance_dict, te
     val_performance_dict[model_name] = baseline.evaluate(val_ds)
     test_performance_dict[model_name] = baseline.evaluate(test_ds)
 
+    if examples is not None:
+        example_pred = {}
+        example_pred[model_name] = baseline.predict(examples['X_ds'])
+
+        return example_pred
 
 
-def main_run_LSTM_models(train_ds, val_ds, test_ds, val_performance_dict, test_performance_dict):
+
+def main_run_LSTM_models(train_ds, val_ds, test_ds, val_performance_dict, test_performance_dict, examples=None):
 
     input_layer_shape = 267
     target_size = 4
@@ -176,9 +168,15 @@ def main_run_LSTM_models(train_ds, val_ds, test_ds, val_performance_dict, test_p
     ])
 
     model_name = 'LSTM_'
-    history = compile_and_fit(train=train_ds, val=val_ds, model=linear, MAX_EPOCHS=1000, model_name=model_name)
+    history = compile_and_fit(train=train_ds, val=val_ds, model=linear, patience=200, MAX_EPOCHS=1000, model_name=model_name)
     val_performance_dict[model_name] = linear.evaluate(val_ds)
     test_performance_dict[model_name] = linear.evaluate(test_ds)
+
+    if examples is not None:
+        example_pred = {}
+        example_pred[model_name] = linear.predict(examples['X_ds'])
+
+        return example_pred
 
 
 
@@ -202,18 +200,26 @@ if __name__ == '__main__':
     data.block_rolling_split(val_comp_size=0, test_comp_size=0, train_time_steps=5 * 4 * 2, val_time_steps=1, test_time_steps=1, shuffle=True)
     data.normalize(method='time')
     data.compute()
+
+
     out = data['200201_201903']
     train_ds, val_ds, test_ds = data.tsds_dataset(out='all', out_dict=None)
+    examples = data.get_examples(example_len=5, example_list=[])
+    examples['pred'] = {}
 
 
     val_performance = {}
     test_performance = {}
 
 
-    main_run_baseline_models(train_ds, val_ds, test_ds, val_performance_dict=val_performance, test_performance_dict=test_performance)
+    tmp_exampeles = main_run_baseline_models(train_ds, val_ds, test_ds, val_performance_dict=val_performance, test_performance_dict=test_performance, examples=examples)
+    examples['pred'].update(tmp_exampeles)
 
-    main_run_LSTM_models(train_ds, val_ds, test_ds, val_performance_dict=val_performance, test_performance_dict=test_performance)
+    tmp_exampeles = main_run_LSTM_models(train_ds, val_ds, test_ds, val_performance_dict=val_performance, test_performance_dict=test_performance, examples=examples)
+    examples['pred'].update(tmp_exampeles)
 
+
+    plot(examples_dict=examples, normalization=True)
 
     print("\n\nEvaluate on validation data:\n", '\n'.join([str(key) + ': ' + (' ' * max(0, 15-len(str(key)))) + str(value) for key, value in val_performance.items()]), sep='')
     print("\nEvaluate on test data:\n", '\n'.join([str(key) + ': ' + (' ' * max(0, 15-len(str(key)))) + str(value) for key, value in test_performance.items()]), sep='')

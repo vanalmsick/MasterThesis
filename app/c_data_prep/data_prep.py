@@ -1,4 +1,4 @@
-import os, sys, zlib, hashlib, warnings, math, datetime
+import os, sys, zlib, hashlib, warnings, math, datetime, random
 import psycopg2, psycopg2.extras, pickle, progressbar, time, hashlib
 import pandas as pd
 import numpy as np
@@ -588,6 +588,57 @@ class data_prep:
         return OUT
 
 
+    def get_examples(self, out=None, example_list=[], example_len=5, random_seed=42):
+        if out is None:
+            out = self.latest_out
+        if len(example_list) == 0:
+            len_samples = len(out['test']['idx'])
+            np.random.seed(random_seed)
+            example_list = np.random.randint(0, len_samples, size=example_len).tolist()
+
+        example_dict = {}
+        example_dict['X'] = out['test']['X'][example_list, :, :]
+        example_dict['X_ds'] = tf.data.Dataset.from_tensors(example_dict['X'])
+        example_dict['y'] = out['test']['y'][example_list, :, :]
+        y_col_idx_in_X = out['columns_lookup']['X'][self.dataset_y_col[0]]
+        example_dict['y_hist'] = out['test']['X'][example_list, :, y_col_idx_in_X]
+        y_col_idx_in_y = out['columns_lookup']['y'][self.dataset_y_col[0]]
+        example_dict['y_true'] = out['test']['y'][example_list, :, y_col_idx_in_y]
+
+        example_dict['columns'] = out['columns']
+        example_dict['columns_lookup'] = out['columns_lookup']
+        lower_idx = [int(i) for i in out['test']['idx'][example_list, 1]]
+        upper_idx = [int(i) for i in out['test']['idx'][example_list, 2]]
+        example_dict['time_step'] = out['test']['idx'][example_list, 0]
+        example_dict['company'] = out['test']['idx'][example_list, -1]
+        idx = []
+        for l_idx, u_idx in zip(lower_idx, upper_idx):
+            idx.append([i for i in self.iter_idx if i >= l_idx and i <= u_idx])
+        example_dict['t_idx'] = idx
+
+        example_dict['examples_num'] = example_len
+        example_dict['examples_list'] = example_list
+
+        norm_param = []
+        for norm_key, comp in zip(example_dict['time_step'], example_dict['company']):
+            if self.normalize_method == 'time-step':
+                mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, '__all__', 'mean')
+                std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, '__all__', 'std')
+            elif self.normalize_method == 'set':
+                mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, f'c_{comp}', 'mean')
+                std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, f'c_{comp}', 'std')
+            elif self.normalize_method == 'block':
+                mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, '__all__', 'mean')
+                std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, '__all__', 'std')
+            norm_param.append({'mean': mean, 'std': std})
+
+        example_dict['norm_param'] = norm_param
+        example_dict['y_cols'] = self.dataset_y_col
+
+        return example_dict
+
+
+
     ############# ITERABLE #############
 
     def __iter__(self):
@@ -850,7 +901,6 @@ if __name__ == '__main__':
     #data.export_to_excel()
 
     print(data)
-
 
 
     #data.feature_filter(include_features_list=None, exclude_features_list=None)
