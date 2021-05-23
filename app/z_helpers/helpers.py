@@ -1,4 +1,4 @@
-import sys, os, pathlib, warnings, datetime
+import sys, os, pathlib, warnings, datetime, mlflow
 import datetime as dt
 import tables as tb
 import pandas as pd
@@ -276,6 +276,49 @@ class custom_hdf5:
         except:
             pass
         return a
+
+
+
+def mlflow_last_run_add_param(param_dict):
+    last_experiment_id, last_run_id, _ = mlflow.search_runs(order_by=['attribute.end_time DESC'])[['experiment_id', 'run_id', 'end_time']].iloc[0]
+
+    mlflow_dict = {'layer_df': ['notes'],
+                   'model_name': ['tag', 'param'],
+                   'max_epochs': ['param'],
+                   'actual_epochs': ['param'],
+                   'early_stopped': ['param'],
+                   'loss': ['param', 'tag']}
+
+    notes = ''
+
+    with mlflow.start_run(run_id=last_run_id) as run:
+        for key, value in param_dict.items():
+            if key[:8] == 'metrics_':
+                type_list = ['metric_dict']
+            else:
+                type_list = mlflow_dict[key]
+            for i_type in type_list:
+                if i_type == 'tag':
+                    mlflow.set_tag(key, value)
+                elif i_type == 'param':
+                    mlflow.log_param(key, value)
+                elif i_type == 'notes':
+                    pass
+                elif i_type == 'metric':
+                    mlflow.log_metric(key, value)
+                elif i_type == 'metric_dict':
+                    for metric_key, metric_value in value.items():
+                        mlflow.log_metric(key[8:] + '_' + metric_key, metric_value)
+                elif i_type == 'artifact':
+                    pass
+                else:
+                    raise Exception(f'Unknown mlflow type {i_type}')
+
+        if "model_name" in param_dict:
+            notes = notes + f'# {param_dict["model_name"]}\n'
+        if "layer_df" in param_dict:
+            notes = notes + (param_dict["layer_df"].to_markdown(index=False) if len(param_dict["layer_df"]) > 0 else 'No layers.')
+        mlflow.set_tag("mlflow.note.content", notes)
 
 
 

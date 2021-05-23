@@ -213,16 +213,16 @@ class data_prep:
         norm_param = {}
 
         tmp_df = df[(df.index >= idx_lower) & (df.index <= idx_upper)]
-        tmp_mean = tmp_df[norm_cols].mean()
-        tmp_std = tmp_df[norm_cols].std()
+        tmp_mean = tmp_df[norm_cols].mean().fillna(0)
+        tmp_std = tmp_df[norm_cols].std().fillna(1)
         tmp_mean_np = my.custom_hdf5.pd_series_to_2d_array(pd_series=tmp_mean)
         tmp_std_np = my.custom_hdf5.pd_series_to_2d_array(pd_series=tmp_std)
         norm_param['__all__'] = {'mean': tmp_mean_np, 'std': tmp_std_np}
 
         for comp in comp_list:
             tmp_df = df[(df[self.dataset_company_col] == comp) & (df.index >= idx_lower) & (df.index <= idx_upper)]
-            tmp_mean = tmp_df[norm_cols].mean()
-            tmp_std = tmp_df[norm_cols].std()
+            tmp_mean = tmp_df[norm_cols].mean().fillna(0)
+            tmp_std = tmp_df[norm_cols].std().fillna(1)
             tmp_mean_np = my.custom_hdf5.pd_series_to_2d_array(pd_series=tmp_mean)
             tmp_std_np = my.custom_hdf5.pd_series_to_2d_array(pd_series=tmp_std)
             norm_param[f'c_{comp}'] = {'mean': tmp_mean_np, 'std': tmp_std_np}
@@ -343,8 +343,8 @@ class data_prep:
         warning = []
 
         if norm_method == 'block':
-            mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, '__all__', 'mean')
-            std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, '__all__', 'std')
+            mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, '__all__', 'mean').fillna(0)
+            std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, '__all__', 'std').fillna(1)
 
         final_cols = False
         last_norm_key = False
@@ -363,13 +363,13 @@ class data_prep:
 
                 if norm_method == 'time-step':
                     if norm_key != last_norm_key:
-                        mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, '__all__', 'mean')
-                        std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, '__all__', 'std')
+                        mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, '__all__', 'mean').fillna(0)
+                        std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, '__all__', 'std').fillna(1)
                         last_norm_key = norm_key
                 elif norm_method == 'set':
                     if norm_key != last_norm_key or comp != last_comp:
-                        mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, f'c_{comp}', 'mean')
-                        std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, f'c_{comp}', 'std')
+                        mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, f'c_{comp}', 'mean').fillna(0)
+                        std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, f'c_{comp}', 'std').fillna(1)
                         last_norm_key = norm_key
                         last_comp = comp
 
@@ -403,7 +403,7 @@ class data_prep:
                                 pass
 
 
-                    df[norm_cols] = (df[norm_cols] - mean[norm_cols].fillna(0)) / std[norm_cols].fillna(1)
+                    df[norm_cols] = ((df[norm_cols] - mean[norm_cols].fillna(0)) / std[norm_cols].fillna(1)).replace([np.nan, np.inf, -np.inf], 0)
 
                     X.append(pd.DataFrame(df.iloc[:-self.window_pred_width][final_cols]).values)
                     y.append(pd.DataFrame(df.iloc[-self.window_pred_width:][self.dataset_y_col]).values)
@@ -622,14 +622,14 @@ class data_prep:
         norm_param = []
         for norm_key, comp in zip(example_dict['time_step'], example_dict['company']):
             if self.normalize_method == 'time-step':
-                mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, '__all__', 'mean')
-                std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, '__all__', 'std')
+                mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, '__all__', 'mean').fillna(0)
+                std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, '__all__', 'std').fillna(1)
             elif self.normalize_method == 'set':
-                mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, f'c_{comp}', 'mean')
-                std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, f'c_{comp}', 'std')
+                mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, f'c_{comp}', 'mean').fillna(0)
+                std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, f'c_{comp}', 'std').fillna(1)
             elif self.normalize_method == 'block':
-                mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, '__all__', 'mean')
-                std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, '__all__', 'std')
+                mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, '__all__', 'mean').fillna(0)
+                std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, '__all__', 'std').fillna(1)
             norm_param.append({'mean': mean, 'std': std})
 
         example_dict['norm_param'] = norm_param
