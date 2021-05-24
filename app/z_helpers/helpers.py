@@ -1,4 +1,4 @@
-import sys, os, pathlib, warnings, datetime, mlflow
+import sys, os, pathlib, warnings, datetime, mlflow, json, tabulate
 import datetime as dt
 import tables as tb
 import pandas as pd
@@ -287,9 +287,72 @@ def mlflow_last_run_add_param(param_dict):
                    'max_epochs': ['param'],
                    'actual_epochs': ['param'],
                    'early_stopped': ['param'],
-                   'loss': ['param', 'tag']}
+                   'loss': ['param', 'tag'],
+                   'data_dataset': ['tag', 'param'],
+                   'data_y_col': ['tag', 'param'],
+                   'data_window_input_width': ['tag', 'param'],
+                   'data_window_pred_width': ['tag', 'param'],
+                   'data_split_method': ['tag', 'param'],
+                   'data_normalize_method': ['tag', 'param'],
+                   'data_lagged_cols': ['param'],
+                   'data_hash_first_level': ['tag', 'param'],
+                   'data_hash_second_level': ['tag', 'param'],
+                   'data_hash': ['tag', 'param'],
+                   'look_ups': ['artifact'],
+                   'final_data_file': ['artifact'],
+                   'data_statistics': ['artifact'],
+                   'data_props': [],
+                   'data_time_period': ['tag', 'param'],
+                   'data_train_sample_size': ['param']}
 
     notes = ''
+    if "model_name" in param_dict:
+        notes = notes + f'# {param_dict["model_name"]}\n'
+
+    if "data_props" in param_dict:
+        param_dict['data_dataset'] = param_dict['data_props']['first_step']['dataset']
+        param_dict['data_y_col'] = param_dict['data_props']['first_step']['dataset_y_col']
+        param_dict['data_window_input_width'] = param_dict['data_props']['first_step']['window_input_width']
+        param_dict['data_window_pred_width'] = param_dict['data_props']['first_step']['window_pred_width']
+        param_dict['data_split_method'] = param_dict['data_props']['second_step']['split_method']
+        param_dict['data_normalize_method'] = param_dict['data_props']['second_step']['normalize_method']
+        param_dict['data_lagged_cols'] = str(param_dict['data_props']['second_step']['lagged_col_dict'])
+        param_dict['data_hash_first_level'] = param_dict['data_props']['first_step_data_hash']
+        param_dict['data_hash_second_level'] = param_dict['data_props']['second_step_data_hash']
+        param_dict['data_hash'] = param_dict['data_hash_first_level'] + '_' + param_dict['data_hash_second_level']
+        param_dict['data_time_period'] = param_dict['data_props']['iter_step']
+        param_dict['data_train_sample_size'] = param_dict["data_props"]["statistics"]['train']['samples']
+
+        cache_folder = get_project_directories(key='cache_dir')
+        cache_folder = os.path.join(cache_folder, param_dict['data_hash_first_level'])
+
+        look_up_file = os.path.join(cache_folder, f'{param_dict["data_hash_second_level"]}_{param_dict["data_time_period"]}_look_up.json')
+        final_data_file = os.path.join(cache_folder, f'{param_dict["data_hash_second_level"]}_{param_dict["data_time_period"]}_data_schema.json')
+        statistics_file = os.path.join(cache_folder, f'{param_dict["data_hash_second_level"]}_{param_dict["data_time_period"]}_data_statistics.txt')
+
+        if not os.path.exists(statistics_file):
+            with open(statistics_file, "w") as outfile:
+                txt = tabulate.tabulate(pd.DataFrame(param_dict["data_props"]["statistics"]), headers='keys', tablefmt='simple')
+                outfile.write(txt)
+
+        if not os.path.exists(look_up_file):
+            with open(look_up_file, "w") as outfile:
+                json.dump(param_dict['data_props']['look_ups'], outfile)
+
+        if not os.path.exists(final_data_file):
+            for key, value in param_dict['data_props']['final_data']['idx'].items():
+                param_dict['data_props']['final_data']['idx'][key] = value.tolist()
+            with open(final_data_file, "w") as outfile:
+                json.dump(param_dict['data_props']['final_data'], outfile)
+
+        param_dict['look_ups'] = look_up_file
+        param_dict['final_data_file'] = final_data_file
+        param_dict['data_statistics'] = statistics_file
+
+        notes = notes + f'**Time:** {param_dict["data_time_period"]}\n**Dataset:** {param_dict["data_dataset"]}\n'
+
+
+
 
     with mlflow.start_run(run_id=last_run_id) as run:
         for key, value in param_dict.items():
@@ -310,14 +373,19 @@ def mlflow_last_run_add_param(param_dict):
                     for metric_key, metric_value in value.items():
                         mlflow.log_metric(key[8:] + '_' + metric_key, metric_value)
                 elif i_type == 'artifact':
-                    pass
+                    mlflow.log_artifact(value)
                 else:
                     raise Exception(f'Unknown mlflow type {i_type}')
 
-        if "model_name" in param_dict:
-            notes = notes + f'# {param_dict["model_name"]}\n'
+
         if "layer_df" in param_dict:
-            notes = notes + (param_dict["layer_df"].to_markdown(index=False) if len(param_dict["layer_df"]) > 0 else 'No layers.')
+            notes = notes + (param_dict["layer_df"].to_markdown(index=False) if len(param_dict["layer_df"]) > 0 else '\nNo layers.')
+        if "metrics_test" in param_dict:
+            metrics_test = pd.DataFrame.from_dict({key: [value] for key, value in param_dict["metrics_test"].items()}, orient='columns')
+            notes = notes + '\n\n<br>\n## Model Performance Metrics:\n' + (metrics_test.to_markdown(index=False) if len(param_dict["metrics_test"]) > 0 else 'Empty test metrics.')
+        if "data_props" in param_dict:
+            notes = notes + '\n\n<br>\n## Data Statistics:\n' + pd.DataFrame(param_dict["data_props"]["statistics"]).to_markdown(index=True)
+
         mlflow.set_tag("mlflow.note.content", notes)
 
 

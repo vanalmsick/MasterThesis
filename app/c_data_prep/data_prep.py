@@ -264,6 +264,79 @@ class data_prep:
 
 
 
+    def get_data_props(self):
+
+        data_props = {}
+        data_props['first_step'] = {}
+        data_props['second_step'] = {}
+        data_props['statistics'] = {}
+        data_props['look_ups'] = {}
+        data_props['final_data'] = {}
+
+        data_props['look_ups']['dummy_col_dict'] = self.dummy_col_dict
+        data_props['look_ups']['iter_dict'] = self.iter_dict
+        data_props['look_ups']['iter_idx'] = self.iter_idx
+        data_props['look_ups']['companies'] = self.companies
+        data_props['look_ups']['out_lookup_col_number'] = self.latest_out['columns']
+        data_props['look_ups']['out_lookup_col_name'] = self.latest_out['columns_lookup']
+
+        data_props['first_step']['dataset'] = self.dataset
+        data_props['first_step']['dataset_y_col'] = self.dataset_y_col
+        data_props['first_step']['dataset_iter_col'] = self.dataset_iter_col
+        data_props['first_step']['dataset_company_col'] = self.dataset_company_col
+        data_props['first_step']['dataset_category_cols'] = self.dataset_category_cols
+        data_props['first_step']['dataset_date_cols'] = self.dataset_date_cols
+
+        data_props['first_step']['window_input_width'] = self.window_input_width
+        data_props['first_step']['window_pred_width'] = self.window_pred_width
+        data_props['first_step']['window_shift'] = self.window_shift
+
+        data_props['second_step']['split_method'] = self.split_method
+        data_props['second_step']['split_props'] = self.split_props
+
+        data_props['second_step']['normalize_method'] = self.normalize_method
+        data_props['second_step']['norm_keep_raw'] = self.norm_keep_raw
+
+        data_props['second_step']['cols_drop'] = self.cols_drop
+        data_props['second_step']['cols_just_these'] = self.cols_just_these
+        data_props['second_step']['comps_exclude'] = self.comps_exclude
+        data_props['second_step']['comps_just_these'] = self.comps_just_these
+
+        data_props['second_step']['lagged_col_dict'] = self.lagged_col_dict
+
+        data_props['final_data']['idx'] = {'train': self.latest_out['train']['idx'],
+                                           'val': self.latest_out['val']['idx'],
+                                           'test': self.latest_out['test']['idx']}
+        data_props['final_data']['cols'] = {'X': list(self.latest_out['columns']['X'].values()),
+                                            'y': list(self.latest_out['columns']['y'].values()),
+                                            'lookup': {'col_number': data_props['look_ups']['out_lookup_col_number'],
+                                                       'col_name': data_props['look_ups']['out_lookup_col_name']}}
+
+        data_props['first_step']['data_hash'] = self.data_first_step_hash
+        data_props['second_step']['data_hash'] = self.data_second_step_hash
+        data_props['first_step_data_hash'] = data_props['first_step']['data_hash']
+        data_props['second_step_data_hash'] = data_props['second_step']['data_hash']
+        data_props['final_data']['data_hash_first_step'] = data_props['first_step']['data_hash']
+        data_props['final_data']['data_hash_second_step'] = data_props['second_step']['data_hash']
+
+        data_props['iter_step'] = self.latest_out['iter_step']
+
+        for i in ['train', 'val', 'test']:
+            tmp = self.latest_out[i]
+            data_props['statistics'][i] = {}
+            data_props['statistics'][i]['samples'] = tmp['X'].shape[0]
+            data_props['statistics'][i]['companies'] = len(np.unique(tmp['idx'][:, 3]))
+            data_props['statistics'][i]['features'] = tmp['X'].shape[-1]
+            data_props['statistics'][i]['time_steps'] = len(np.unique(tmp['idx'][:, 0]))
+            data_props['statistics'][i]['time_min'] = tmp['idx'][:, 1].astype(int).min()
+            data_props['statistics'][i]['time_max'] = tmp['idx'][:, 2].astype(int).max()
+
+
+        return data_props
+
+
+
+
     def compute(self):
         # Raise warnings for stupid data combinations
         if self.split_method == 'single_time_rolling' and 'ToDo: REPLACE TEST' != '__all__':
@@ -327,6 +400,7 @@ class data_prep:
         self.norm_param_file = norm_cache_file
 
         self.data_hash = cache_hash
+        self.data_first_step_hash = cache_hash
         self.computed = True
 
         print('Data class skeleton constructed (computed)! Ready to iterate across or subscript...')
@@ -423,6 +497,7 @@ class data_prep:
 
         column_hash = self._get_data_hash(self.cols_drop, self.dataset_date_cols, self.cols_just_these, self.norm_keep_raw, self.comps_just_these, self.normalize_method, self.comps_exclude)
         final_file = os.path.join(final_data_cache_folder, f'{column_hash}_{iter_step}_iter-step.npz')
+        self.data_second_step_hash = column_hash
 
         if os.path.exists(final_file):
             print('Iteration-step already cached just getting data from file...')
@@ -578,7 +653,8 @@ class data_prep:
             print(f'\nData cached for iteration-step {iter_step}. Took {int((end-start)/60)} min.')
 
 
-        OUT = {'train': {'X': train_X, 'y': train_y, 'idx': train_idx},
+        OUT = {'iter_step': iter_step,
+               'train': {'X': train_X, 'y': train_y, 'idx': train_idx},
                'val':   {'X': val_X,   'y': val_y,   'idx': val_idx},
                'test':  {'X': test_X,  'y': test_y,  'idx': test_idx},
                'columns': ndarray_columns,

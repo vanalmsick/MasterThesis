@@ -151,7 +151,7 @@ def plot(examples_dict, normalization=True):
 
 
 
-def main_run_baseline_models(train_ds, val_ds, test_ds, val_performance_dict, test_performance_dict, pred_length=4, examples=None):
+def main_run_baseline_models(train_ds, val_ds, test_ds, val_performance_dict, test_performance_dict, data_props, pred_length=4, examples=None):
 
     class Baseline_last_value(tf.keras.Model):
         def __init__(self, label_index=None):
@@ -177,6 +177,7 @@ def main_run_baseline_models(train_ds, val_ds, test_ds, val_performance_dict, te
     baseline = Baseline_last_value(label_index=data.latest_out['columns_lookup']['X'][data.dataset_y_col[0]])
     model_name = baseline.name
     history, mlflow_additional_params = compile_and_fit(train=train_ds, val=val_ds, model=baseline, MAX_EPOCHS=1, model_name=model_name)
+    mlflow_additional_params['data_props'] = data_props
     val_performance_dict[model_name] = evaluate_model(model=baseline, tf_data=val_ds)
     test_performance_dict[model_name] = evaluate_model(model=baseline, tf_data=test_ds, mlflow_additional_params=mlflow_additional_params)
     my_helpers.mlflow_last_run_add_param(param_dict=mlflow_additional_params)
@@ -204,6 +205,7 @@ def main_run_baseline_models(train_ds, val_ds, test_ds, val_performance_dict, te
     baseline4 = Baseline_4last_value(label_index=data.latest_out['columns_lookup']['X'][data.dataset_y_col[0]])
     model_name4 = baseline4.name
     history, mlflow_additional_params = compile_and_fit(train=train_ds, val=val_ds, model=baseline4, MAX_EPOCHS=1, model_name=model_name4)
+    mlflow_additional_params['data_props'] = data_props
     val_performance_dict[model_name4] = evaluate_model(model=baseline4, tf_data=val_ds)
     test_performance_dict[model_name4] = evaluate_model(model=baseline4, tf_data=test_ds, mlflow_additional_params=mlflow_additional_params)
     my_helpers.mlflow_last_run_add_param(param_dict=mlflow_additional_params)
@@ -219,11 +221,12 @@ def main_run_baseline_models(train_ds, val_ds, test_ds, val_performance_dict, te
 
 
 
-def main_run_linear_models(train_ds, val_ds, test_ds, val_performance_dict, test_performance_dict, examples=None):
+def main_run_linear_models(train_ds, val_ds, test_ds, val_performance_dict, test_performance_dict, data_props, examples=None):
 
     linear = tf.keras.Sequential([tf.keras.layers.Dense(units=1)])
     model_name_lin = 'linear'
     history, mlflow_additional_params = compile_and_fit(model=linear, train=train_ds, val=val_ds, MAX_EPOCHS=100, model_name=model_name_lin)
+    mlflow_additional_params['data_props'] = data_props
     val_performance_dict[model_name_lin] = evaluate_model(model=linear, tf_data=val_ds)
     test_performance_dict[model_name_lin] = evaluate_model(model=linear, tf_data=test_ds, mlflow_additional_params=mlflow_additional_params)
     my_helpers.mlflow_last_run_add_param(param_dict=mlflow_additional_params)
@@ -236,6 +239,7 @@ def main_run_linear_models(train_ds, val_ds, test_ds, val_performance_dict, test
         ])
     model_name_den = 'dense'
     history, mlflow_additional_params = compile_and_fit(model=dense, train=train_ds, val=val_ds, MAX_EPOCHS=100, model_name=model_name_den)
+    mlflow_additional_params['data_props'] = data_props
     val_performance_dict[model_name_den] = evaluate_model(model=dense, tf_data=val_ds)
     test_performance_dict[model_name_den] = evaluate_model(model=dense, tf_data=test_ds, mlflow_additional_params=mlflow_additional_params)
     my_helpers.mlflow_last_run_add_param(param_dict=mlflow_additional_params)
@@ -253,6 +257,7 @@ def main_run_linear_models(train_ds, val_ds, test_ds, val_performance_dict, test
         ])
     model_name_multi_den = 'multi_dense'
     history, mlflow_additional_params = compile_and_fit(model=multi_step_dense, train=train_ds, val=val_ds, MAX_EPOCHS=100, model_name=model_name_multi_den)
+    mlflow_additional_params['data_props'] = data_props
     val_performance_dict[model_name_multi_den] = evaluate_model(model=multi_step_dense, tf_data=val_ds)
     test_performance_dict[model_name_multi_den] = evaluate_model(model=multi_step_dense, tf_data=test_ds, mlflow_additional_params=mlflow_additional_params)
     my_helpers.mlflow_last_run_add_param(param_dict=mlflow_additional_params)
@@ -272,7 +277,7 @@ def main_run_linear_models(train_ds, val_ds, test_ds, val_performance_dict, test
 
 
 
-def main_run_statistical_models(train_ds, val_ds, test_ds, val_performance_dict, test_performance_dict, examples=None):
+def main_run_statistical_models(train_ds, val_ds, test_ds, val_performance_dict, test_performance_dict, data_props, examples=None):
     from statsmodels.tsa.arima.model import ARIMA
     model = ARIMA(differenced, order=(7, 0, 1))
     model_fit = model.fit()
@@ -282,7 +287,7 @@ def main_run_statistical_models(train_ds, val_ds, test_ds, val_performance_dict,
 
 
 
-def main_run_LSTM_models(train_ds, val_ds, test_ds, val_performance_dict, test_performance_dict, examples=None):
+def main_run_LSTM_models(train_ds, val_ds, test_ds, val_performance_dict, test_performance_dict, data_props, examples=None):
 
     input_layer_shape = 267
     target_size = 4
@@ -316,6 +321,7 @@ def main_run_LSTM_models(train_ds, val_ds, test_ds, val_performance_dict, test_p
 
     model_name = 'LSTM'
     history, mlflow_additional_params = compile_and_fit(train=train_ds, val=val_ds, model=linear, patience=200, MAX_EPOCHS=1000, model_name=model_name)
+    mlflow_additional_params['data_props'] = data_props
     val_performance_dict[model_name] = evaluate_model(model=linear, tf_data=val_ds)
     test_performance_dict[model_name] = evaluate_model(model=linear, tf_data=test_ds, mlflow_additional_params=mlflow_additional_params)
     my_helpers.mlflow_last_run_add_param(param_dict=mlflow_additional_params)
@@ -353,8 +359,9 @@ if __name__ == '__main__':
     data.normalize(method='set')
     data.compute()
 
-
     out = data['200201_201903']
+    data_props = data.get_data_props()
+
     train_ds, val_ds, test_ds = data.tsds_dataset(out='all', out_dict=None)
     examples = data.get_examples(example_len=5, example_list=[])
     examples['pred'] = {}
@@ -364,13 +371,13 @@ if __name__ == '__main__':
     test_performance = {}
 
 
-    tmp_exampeles = main_run_baseline_models(train_ds, val_ds, test_ds, pred_length=4, val_performance_dict=val_performance, test_performance_dict=test_performance, examples=examples)
+    tmp_exampeles = main_run_baseline_models(train_ds, val_ds, test_ds, pred_length=4, val_performance_dict=val_performance, test_performance_dict=test_performance, examples=examples, data_props=data_props)
     examples['pred'].update(tmp_exampeles)
 
-    #tmp_exampeles = main_run_linear_models(train_ds, val_ds, test_ds, val_performance_dict=val_performance, test_performance_dict=test_performance, examples=examples)
+    #tmp_exampeles = main_run_linear_models(train_ds, val_ds, test_ds, val_performance_dict=val_performance, test_performance_dict=test_performance, examples=examples, data_props=data_props)
     #examples['pred'].update(tmp_exampeles)
 
-    tmp_exampeles = main_run_LSTM_models(train_ds, val_ds, test_ds, val_performance_dict=val_performance, test_performance_dict=test_performance, examples=examples)
+    tmp_exampeles = main_run_LSTM_models(train_ds, val_ds, test_ds, val_performance_dict=val_performance, test_performance_dict=test_performance, examples=examples, data_props=data_props)
     examples['pred'].update(tmp_exampeles)
 
 
