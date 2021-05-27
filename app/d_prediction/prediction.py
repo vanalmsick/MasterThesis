@@ -146,6 +146,7 @@ if __name__ == '__main__':
 
     out = data['200201_201903']
     data_props = data.get_data_props()
+    #data.export_to_excel()
 
     train_ds, val_ds, test_ds = data.tsds_dataset(out='all', out_dict=None)
     examples = data.get_examples(example_len=5, example_list=[])

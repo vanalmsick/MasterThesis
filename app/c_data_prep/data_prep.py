@@ -109,6 +109,8 @@ class data_prep:
             dummy_dict[col] = tmp.columns.tolist()
             df = pd.concat([df, tmp], axis=1)
         self.data = df.drop(columns=cat_cols)
+        # ToDo: Implement real NaN handling
+        self.data = self.data.fillna(self.data.mean().fillna(0))
         self.dummy_col_dict = dummy_dict
 
 
@@ -407,35 +409,40 @@ class data_prep:
 
 
 
-    def _prep_final_dataset(self, df, norm_key=None, lower_idx=None, upper_idx=None, comp=None, norm_method=None):
-        if type(df) != list:
-            df = [(df, norm_key, lower_idx, upper_idx, comp, norm_method)]
+    def _prep_final_dataset(self, df_or_args, norm_key=None, lower_idx=None, upper_idx=None, comp=None, norm_method=None):
+        if type(df_or_args) != list:
+            args = [(df_or_args, norm_key, lower_idx, upper_idx, comp, norm_method)]
+        else:
+            args = df_or_args
 
         X = []
         y = []
         idx = []
         warning = []
 
-        if norm_method == 'block':
-            mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, '__all__', 'mean').fillna(0)
-            std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, '__all__', 'std').fillna(1)
-
         final_cols = False
         last_norm_key = False
         last_comp = False
 
-        tmp_df = self.data
-        # ToDo: Implement real NaN handling
-        tmp_df = tmp_df.fillna(tmp_df.mean().fillna(0))
+        s = 0
+        ns = 0
+        t = 0
 
+        for df, norm_key, lower_idx, upper_idx, comp, norm_method in args:
+            t += 1
+            #print(type(norm_key), norm_key, type(lower_idx), lower_idx, type(upper_idx), upper_idx, type(comp), comp, type(norm_method), norm_method)
+            tmp_df = df[(df.index >= int(lower_idx)) & (df.index <= int(upper_idx)) & (df[self.dataset_company_col] == int(comp))]
 
-        for df, norm_key, lower_idx, upper_idx, comp, norm_method in df:
-            tmp_df = tmp_df[(tmp_df.index >= lower_idx) & (tmp_df.index <= upper_idx) & (tmp_df[self.dataset_company_col] == comp)]
 
             if len(tmp_df) > 0:
                 df = tmp_df.copy()
 
-                if norm_method == 'time-step':
+                if norm_method == 'block':
+                    if last_norm_key is False:
+                        mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, '__all__', 'mean').fillna(0)
+                        std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, '__all__', 'std').fillna(1)
+                        last_norm_key = True
+                elif norm_method == 'time-step':
                     if norm_key != last_norm_key:
                         mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, '__all__', 'mean').fillna(0)
                         std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, '__all__', 'std').fillna(1)
@@ -452,10 +459,14 @@ class data_prep:
                 df.sort_values(sort_cols, inplace=True)
 
                 if len(df) > (self.window_input_width + self.window_pred_width):
-                    warning.append([str(df[self.dataset_company_col].unique().tolist())[1:-1], df.index.min(), df.index.max(), (f'Company {str(df[self.dataset_company_col].unique().tolist())[1:-1]} has data duplicates in time_step {df.index.min()}-{df.index.max()}')])
+                    warning.append([comp, lower_idx, upper_idx, (f'Company {comp} has data duplicates in time_step {lower_idx}-{upper_idx}')])
+                    #print(warning[-1])
                     df = df.drop_duplicates(subset=sort_cols, keep='last')
+                    ns +=1
                 if len(df) != (self.window_input_width + self.window_pred_width):
-                    warning.append([str(df[self.dataset_company_col].unique().tolist())[1:-1], df.index.min(), df.index.max(), (f'Company {str(df[self.dataset_company_col].unique().tolist())[1:-1]} has too few time points in time_step {df.index.min()}-{df.index.max()}')])
+                    warning.append([comp, lower_idx, upper_idx, (f'Company {comp} has too few time points in time_step {lower_idx}-{upper_idx}')])
+                    #print(warning[-1])
+                    ns+=1
                 else:
 
                     if final_cols == False:
@@ -479,11 +490,18 @@ class data_prep:
 
                     df[norm_cols] = ((df[norm_cols] - mean[norm_cols].fillna(0)) / std[norm_cols].fillna(1)).replace([np.nan, np.inf, -np.inf], 0)
 
+                    df = df.fillna(0).replace([np.nan, np.inf, -np.inf], 0)
+
                     X.append(pd.DataFrame(df.iloc[:-self.window_pred_width][final_cols]).values)
                     y.append(pd.DataFrame(df.iloc[-self.window_pred_width:][self.dataset_y_col]).values)
                     idx.append([norm_key, lower_idx, upper_idx, comp])
+                    s+=1
             else:
-                warning.append([str(df[self.dataset_company_col].unique().tolist())[1:-1], df.index.min(), df.index.max(), (f'Company {str(df[self.dataset_company_col].unique().tolist())[1:-1]} has no data in time_step {df.index.min()}-{df.index.max()}')])
+                warning.append([comp, lower_idx, upper_idx, (f'Company {comp} has no data in time_step {lower_idx}-{upper_idx}')])
+                #print(warning[-1])
+                ns+=1
+
+        #print(f'DONE! From {t} {s} were successful and {ns} not')
 
         return X, y, idx, [final_cols], warning
 
@@ -541,12 +559,27 @@ class data_prep:
                     comp = type(self.data[self.dataset_company_col].iloc[0])(comp[2:])
                     train_todo_list.append((self.data, norm_key, lower, upper, comp, norm_level))
 
-            train_todo_list = my.sort_list_of_sub(train_todo_list, sort_element=4)
+            #train_todo_list = my.sort_list_of_sub(train_todo_list, sort_element=4)
             n = 750
             train_todo_list_of_list = [train_todo_list[i:i + n] for i in range(0, len(train_todo_list), n)]
 
             print(f'\nCaching, normalizing, and preparing train data for iteration-step/subscript {iter_step}:')
             train_X, train_y, train_idx, train_col_list, train_warning_list = my.multiprocessing_func_with_progressbar(func=self._prep_final_dataset, argument_list=train_todo_list_of_list, num_processes=-1, results='extend')
+            """
+            train_X, train_y, train_idx, train_col_list, train_warning_list = [], [], [], [], []
+            i = 0
+            for args in train_todo_list:
+                train_X_tmp, train_y_tmp, train_idx_tmp, train_col_list_tmp, train_warning_list_tmp = self._prep_final_dataset(*args)
+                train_X.append(train_X_tmp)
+                train_y.append(train_y_tmp)
+                train_idx.append(train_idx_tmp)
+                train_col_list.append(train_col_list_tmp)
+                train_warning_list.append(train_warning_list_tmp)
+                if i > 30:
+                    print(100)
+                    i = 0
+                i += 1
+            """
 
             # ToDo: There are entire datasets with 500 tasks none resulting in long enough data
             train_col_list = list(filter(None, train_col_list))
@@ -579,7 +612,7 @@ class data_prep:
                     comp = type(self.data[self.dataset_company_col].iloc[0])(comp[2:])
                     val_todo_list.append((self.data, norm_key, lower, upper, comp, norm_level))
 
-            val_todo_list = my.sort_list_of_sub(val_todo_list, sort_element=4)
+            #val_todo_list = my.sort_list_of_sub(val_todo_list, sort_element=4)
             n_min = min(n, int(len(val_todo_list) / 7))
             val_todo_list_of_list = [val_todo_list[i:i + n_min] for i in range(0, len(val_todo_list), n_min)]
 
@@ -617,7 +650,7 @@ class data_prep:
                     comp = type(self.data[self.dataset_company_col].iloc[0])(comp[2:])
                     test_todo_list.append((self.data, norm_key, lower, upper, comp, norm_level))
 
-            test_todo_list = my.sort_list_of_sub(test_todo_list, sort_element=4)
+            #test_todo_list = my.sort_list_of_sub(test_todo_list, sort_element=4)
             n_min = min(n, int(len(test_todo_list)/7))
             test_todo_list_of_list = [test_todo_list[i:i + n_min] for i in range(0, len(test_todo_list), n_min)]
 
@@ -834,9 +867,7 @@ class data_prep:
             my_array = tmp_X
             my_array = my_array.reshape((-1, my_array.shape[-1]))
             count_idx = np.ceil(np.array(range(1, my_array.shape[0] + 1)) / 20).astype(int).reshape(-1, 1)
-            props_dict = pd.DataFrame.from_dict(
-                dict(zip(range(1, len(tmp_idx) + 1), tmp_idx.tolist())), orient='index',
-                columns=[data.dataset_company_col, 'lower_idx', 'upper_idx'])
+            props_dict = pd.DataFrame.from_dict(dict(zip(range(1, len(tmp_idx) + 1), tmp_idx.tolist())), orient='index', columns=['period', self.dataset_company_col, 'lower_idx', 'upper_idx'])
             new_array = np.append(count_idx, my_array, 1)
             new_df = pd.DataFrame(new_array[:, 1:], columns=list(tmp_cols.values()), index=new_array[:, 0])
             final_df = pd.concat([new_df, props_dict], axis=1)
