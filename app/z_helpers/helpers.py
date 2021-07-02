@@ -103,8 +103,8 @@ def postgresql_connect(params_dic):
 def _dtype_mapping():
     return {'object' : 'TEXT',
         'string': 'TEXT',
-        'int64' : 'REAL', # INT
-        'float64' : 'REAL',
+        'int64' : 'INT', # INT
+        'float64' : 'DOUBLE PRECISION',
         'datetime64' : 'DATETIME',
         'bool' : 'BOOLEAN',
         'category' : 'TEXT',

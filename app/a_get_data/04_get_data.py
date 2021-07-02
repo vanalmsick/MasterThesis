@@ -7,7 +7,7 @@ import sys, os, ast, progressbar, time, warnings
 
 ### Add other shared functions ###
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-import helpers as my
+import z_helpers as my
 ##################################
 
 
@@ -132,9 +132,90 @@ def get_data():
 
 
 
+def get_handpicked_dataset():
+    years_back = 27
+    reuters_max_data_limit = 50000
+
+    aws_param = my.get_credentials(credential='aws')
+
+    data_dir = my.get_project_directories(key='data_dir')
+    company_list_file = os.path.join(data_dir, 'index_constituents.csv')
+    company_df = pd.read_csv(company_list_file)
+    company_list = company_df['constituent_ric'].to_list()
+
+    col_df = pd.read_csv('a_get_data/reuters_eikon/key_reuters_fields.csv')
+    col_df = col_df[col_df['Data Type'] == 'time series']
+    col_list = col_df['Reuters Code'].to_list()
+
+    companies_per_request = int((reuters_max_data_limit / len(col_list)) / (years_back * 4)) - 1
+    company_list_of_lists = instrument_list_of_list = [company_list[i:i + companies_per_request] for i in range(0, len(company_list), companies_per_request)]
+
+    col_rename_dict = col_df[['Reuters Code', 'Clear Name']].set_index('Reuters Code')['Clear Name'].to_dict()
+    col_rename_dict = dict(zip([i.upper() for i in list(col_rename_dict.keys())], list(col_rename_dict.values())))
+    col_rename_dict['INSTRUMENT'] = 'ric'
+    app_dict = {}
+    for key, value in col_rename_dict.items():
+        app_dict[key.replace('.','_')] = value
+    col_rename_dict.update(app_dict)
+
+    id = 900000
+
+    # Progressbar to see hwo long it will still take
+    print('\nGetting Small dataset from Reuters and save it:')
+    time.sleep(0.5)
+    widgets = ['[',
+               progressbar.Timer(format='elapsed: %(elapsed)s'),
+               '] ',
+               progressbar.Bar('█'), ' (',
+               progressbar.ETA(), ') ',
+               ]
+    progress_bar = progressbar.ProgressBar(max_value=len(company_list_of_lists) + 1, widgets=widgets).start()
+
+
+    first_item = True
+    with my.postgresql_connect(aws_param) as aws_conn:
+        for comps in company_list_of_lists:
+            id += 1
+            df, err = reuters_eikon_data_scraper(instruments=comps,
+                                                 fields=col_list,
+                                                 properties={"SDate": 0, "EDate": -4 * years_back, "Frq": "CQ", "Curn": "USD"},
+                                                 api_key=my.get_credentials(credential='reuters_eikon_api'))
+            #print('Error:', err)
+
+            df.columns = df.columns.str.upper()
+            df = df.rename(columns=col_rename_dict)
+            df = df[(df['Date'].notna() & ~df['Date'].isnull() & (df['Date'] != ''))]
+            df = df.replace(r'^\s*$', np.nan, regex=True)
+            df = df.replace('', np.nan, regex=True)
+            df = df.replace('NaN', np.nan, regex=True)
+            df = df.replace('Infinity', np.nan, regex=True)
+            df = df.replace('-Infinity', np.nan, regex=True)
+            numeric_cols = col_df[~col_df['Variable Type'].isin(['property', 'category'])]['Clear Name'].tolist()
+            df[numeric_cols] = df[numeric_cols].astype(float)
+
+
+            if df is not None and len(df) > 0:
+                if first_item:
+                    my.create_sql_tbl(df, conn=aws_conn, tbl_name='data_small', schema='reuters')
+                    first_item = False
+                my.df_insert_sql(conn=aws_conn, df=df, table='data_small', schema='reuters')
+            if err is not None:
+                err['request_id'] = id
+                my.submit_error(error_dict=err, conn=aws_conn, schema='reuters')
+
+            progress_bar.update(id - 900000)
+
+
+
+
+
+
+
 
 if __name__ == '__main__':
     my.convenience_settings()
-    get_data()
+
+    #get_data()  # The big all in dataset
+    get_handpicked_dataset()  # The small reuters dataset
 
     print('Everything done! No Open ToDos left.')

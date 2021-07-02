@@ -1,0 +1,198 @@
+﻿Category,Name,Reuters Code,Clear Name,Data Type,Variable Type
+General,Data date,TR.TotalReturn.date,Date,time series,property
+General,Company Name,TR.CommonName,CompanyName,property,property
+General,Country,TR.HeadquartersCountry,HeadquartersCountry,property,category
+General,Exchange,TR.ExchangeName,ExchangeName,property,category
+General,Industry,TR.TRBCIndustryGroup,Industry,property,category
+General,Sector,TR.GICSSector,Sector,property,category
+Price/Market,Index Name,TR.PriceMainIndex,IndexName,property,category
+General,Market Cap Currency,TR.CompanyMarketCap.Currency,MarketCapCurrency,time series,category
+Price/Market,Price (Previous Close),TR.PriceClose,PriceClose,time series,stock
+Price/Market,Price High,TR.PriceHigh,PriceHigh,time series,stock
+Price/Market,Price Low,TR.PriceLow,PriceLow,time series,stock
+Price/Market,Median Price Target,TR.PriceTargetMedian,PriceTargetMedian,time series,stock
+Price/Market,Implied Profit,TR.PriceTargetMedian/TR.PriceClose-1,ImpliedProfit,time series,percent
+Price/Market,Beta,TR.WACCBeta,Beta,time series,ratio
+Price/Market,Dividend Yield (Indicated),TR.DividendYield,DividendYield,time series,ratio
+Price/Market,Shares Outstanding ,TR.CompanySharesOutstanding,SharesOutstanding,time series,stock
+Price/Market,Float Shares ,TR.FreeFloat,FloatShares,time series,stock
+Price/Market,Float Pct of O/S,TR.FreeFloatPct/100,FloatSharesPct,time series,percent
+Price/Market,Market Capitalization ,TR.CompanyMarketCap,MarketCapitalization,time series,stock
+Price/Market,Enterprise Value  ,TR.EV,EnterpriseValue,time series,stock
+Analysts,Consensus Recommendation - Buy/Hold/Sell,TR.RecLabel,AnalystRecom,time series,category
+Analysts,Consensus Recommendation - Score,TR.RecMean,AnalystRecomScore,time series,ratio
+Analysts,# of Analysts,TR.NumOfRecommendations,AnalystRecomNum,time series,stock
+Analyst Estimates,Sales - Mean Estimate - 1Y,TR.RevenueMeanEstimate(period=FY1),AnalystSalesEstMean1Y,time series,flow
+Analyst Estimates,Sales - High Estimate - 1Y,TR.RevenueHigh(period=FY1),AnalystSalesEstHigh1Y,time series,flow
+Analyst Estimates,Sales - Low Estimate - 1Y,TR.RevenueLow(period=FY1),AnalystSalesEstLow1Y,time series,flow
+Analyst Estimates,Sales - Estimate change - 1Y,"PERCENT_CHG(TR.RevenueMeanEstimate(Period=FY1), wsize=-1)",AnalystSalesEstChgPct1Y,time series,percent
+Analyst Estimates,EBITDA - Mean Estimate - 1Y,TR.EBITDAMean(Period=FY1),AnalystEBITDAEstMean1Y,time series,flow
+Analyst Estimates,EBITDA - High Estimate - 1Y,TR.EBITDAHigh(Period=FY1),AnalystEBITDAEstHigh1Y,time series,flow
+Analyst Estimates,EBITDA - Low Estimate - 1Y,TR.EBITDALow(Period=FY1),AnalystEBITDAEstLow1Y,time series,flow
+Analyst Estimates,EBITDA - Estimate change - 1Y,"PERCENT_CHG(TR.EBITDAMean(Period=FY1), wsize=-1)",AnalystEBITDAEstChgPct1Y,time series,percent
+Analyst Estimates,EPS - Mean Estimate - 1Y,TR.EPSMeanEstimate(Period=FY1),AnalystEPSEstMean1Y,time series,ratio
+Analyst Estimates,EPS - High Estimate - 1Y,TR.EPSHigh(Period=FY1),AnalystEPSEstHigh1Y,time series,ratio
+Analyst Estimates,EPS - Low Estimate - 1Y,TR.EPSLow(Period=FY1),AnalystEPSEstLow1Y,time series,ratio
+Analyst Estimates,EPS - Estimate change - 1Y,"PERCENT_CHG(TR.EPSMeanEstimate(Period=FY1), wsize=-1)",AnalystEPSEstChgPct1Y,time series,percent
+Analyst Estimates,Sales - Mean Estimate - 2Y,TR.RevenueMeanEstimate(period=FY2),AnalystSalesEstMean2Y,time series,flow
+Analyst Estimates,Sales - High Estimate - 2Y,TR.RevenueHigh(period=FY2),AnalystSalesEstHigh2Y,time series,flow
+Analyst Estimates,Sales - Low Estimate - 2Y,TR.RevenueLow(period=FY2),AnalystSalesEstLow2Y,time series,flow
+Analyst Estimates,Sales - Estimate change - 2Y,"PERCENT_CHG(TR.RevenueMeanEstimate(Period=FY2), wsize=-1)",AnalystSalesEstChgPct2Y,time series,percent
+Analyst Estimates,EBITDA - Mean Estimate - 2Y,TR.EBITDAMean(Period=FY2),AnalystEBITDAEstMean2Y,time series,flow
+Analyst Estimates,EBITDA - High Estimate - 2Y,TR.EBITDAHigh(Period=FY2),AnalystEBITDAEstHigh2Y,time series,flow
+Analyst Estimates,EBITDA - Low Estimate - 2Y,TR.EBITDALow(Period=FY2),AnalystEBITDAEstLow2Y,time series,flow
+Analyst Estimates,EBITDA - Estimate change - 2Y,"PERCENT_CHG(TR.EBITDAMean(Period=FY2), wsize=-1)",AnalystEBITDAEstChgPct2Y,time series,percent
+Analyst Estimates,EPS - Mean Estimate - 2Y,TR.EPSMeanEstimate(Period=FY2),AnalystEPSEstMean2Y,time series,ratio
+Analyst Estimates,EPS - High Estimate - 2Y,TR.EPSHigh(Period=FY2),AnalystEPSEstHigh2Y,time series,ratio
+Analyst Estimates,EPS - Low Estimate - 2Y,TR.EPSLow(Period=FY2),AnalystEPSEstLow2Y,time series,ratio
+Analyst Estimates,EPS - Estimate change - 2Y,"PERCENT_CHG(TR.EPSMeanEstimate(Period=FY2), wsize=-1)",AnalystEPSEstChgPct2Y,time series,percent
+Valuation Ratios,P/E - Actual,TR.PE,PtoEPS,time series,ratio
+Valuation Ratios,P/SALES - Actual,TR.PriceToSalesPerShare,PtoSales,time series,ratio
+Valuation Ratios,EV/REVS - Actual,TR.EVToSales,EVtoSales,time series,ratio
+Valuation Ratios,EV/EBITDA - Actual,TR.EVToEBITDA,EVtoEBITDA,time series,ratio
+Valuation Ratios,P/E - 1Y,TR.PToEPSMeanEst(Period=FY1),PtoEPS1Y,time series,ratio
+Valuation Ratios,P/SALES - 1Y,TR.PToREVMeanEst(Period=FY1),PtoSales1Y,time series,ratio
+Valuation Ratios,EV/REVS - 1Y,TR.EV/TR.RevenueMeanEstimate(Period=FY1),EVtoSales1Y,time series,ratio
+Valuation Ratios,EV/EBITDA - 1Y,TR.EV/TR.EBITDAMean(Period=FY1),EVtoEBITDA1Y,time series,ratio
+Valuation Ratios,P/E - 2Y,TR.PToEPSMeanEst(Period=FY2),PtoEPS2Y,time series,ratio
+Valuation Ratios,P/SALES - 2Y,TR.PToREVMeanEst(Period=FY2),PtoSales2Y,time series,ratio
+Valuation Ratios,EV/REVS - 2Y,TR.EV/TR.RevenueMeanEstimate(Period=FY2),EVtoSales2Y,time series,ratio
+Valuation Ratios,EV/EBITDA - 2Y,TR.EV/TR.EBITDAMean(Period=FY2),EVtoEBITDA2Y,time series,ratio
+Valuation Ratios,P/E - 3Y,TR.PToEPSMeanEst(Period=FY3),PtoEPS3Y,time series,ratio
+Valuation Ratios,P/SALES - 3Y,TR.PToREVMeanEst(Period=FY3),PtoSales3Y,time series,ratio
+Valuation Ratios,EV/REVS - 3Y,TR.EV/TR.RevenueMeanEstimate(Period=FY3),EVtoSales3Y,time series,ratio
+Valuation Ratios,EV/EBITDA - 3Y,TR.EV/TR.EBITDAMean(Period=FY3),EVtoEBITDA3Y,time series,ratio
+Valuation Ratios,P/E - 4Y,TR.PToEPSMeanEst(Period=FY4),PtoEPS4Y,time series,ratio
+Valuation Ratios,P/SALES - 4Y,TR.PToREVMeanEst(Period=FY4),PtoSales4Y,time series,ratio
+Valuation Ratios,EV/REVS - 4Y,TR.EV/TR.RevenueMeanEstimate(Period=FY4),EVtoSales4Y,time series,ratio
+Valuation Ratios,EV/EBITDA - 4Y,TR.EV/TR.EBITDAMean(Period=FY4),EVtoEBITDA4Y,time series,ratio
+Income Statement,Sales,"AVAIL(TR.TotalRevenue,TR.BankTotalRevenue)",Sales,time series,flow
+Income Statement,COGS,TR.F.COGSTot,COGS,time series,flow
+Income Statement,Gross Income,TR.GrossProfit,GrossProfit,time series,flow
+Income Statement,Operating Expense,TR.F.OpExpn,OpExpn,time series,flow
+Income Statement,Rental/Operating Lease Expense,TR.F.RentalOpLeaseExpn,RentalOpLeaseExpn,time series,flow
+Income Statement,Selling General & Administrative Expenses,TR.SGAExpenseTotal,SGA,time series,flow
+Income Statement,R&D,TR.ResearchAndDevelopment,RandD,time series,flow
+Income Statement,EBITDA,TR.EBITDA,EBITDA,time series,flow
+Income Statement,Depreciation and amortization,TR.DepreciationDepletion+TR.Amortization,DeprArmo,time series,flow
+Income Statement,Depreciation,TR.DepreciationDepletion,Depreciation,time series,flow
+Income Statement,Amortization,TR.Amortization,Amortization,time series,flow
+Income Statement,EBIT,TR.EBIT,EBIT,time series,flow
+Income Statement,Change in Working capital (WC),"NET_CHG(TR.WorkingCapital, wsize=-1)",WCChg,time series,flow
+Income Statement,Interest Expense,TR.F.IntrExpn,InterestExpense,time series,flow
+Income Statement,Pretax Income,TR.NetIncomeBeforeTaxes,PretaxIncome,time series,flow
+Income Statement,Taxes,TR.F.IncTax,Tax,time series,flow
+Income Statement,Deferred Taxes,ZAV(TR.DeferredTaxes),DeferredTaxes,time series,flow
+Income Statement,NOPAT,TR.F.NetIncAfterTax,NOPAT,time series,flow
+Income Statement,Net Income,TR.NetIncome,NetIncome,time series,flow
+Income Statement,Retained Earnings,TR.F.RetainedEarn,RetainedEarn,time series,flow
+Income Statement,Operating Income,TR.F.OpProfBefNonRecurIncExpn,OpIncome,time series,flow
+Income Statement,Common Shares,TR.TtlCmnSharesOut,CommonShares,time series,stock
+Balance Sheet,Cash and short-term Investments,"AVAIL(TR.CashAndSTInvestments,TR.CashAndDueFromBanks)",CashAndSTInv,time series,stock
+Balance Sheet,Cash & Equivalents Total,TR.F.CashCashEquivTot,CashTotal,time series,stock
+Balance Sheet,Working Capital,TR.WorkingCapital,WC,time series,stock
+Balance Sheet,Inventory,TR.F.InvntTot,Inventory,time series,stock
+Balance Sheet,Inventory Change,"NET_CHG(TR.F.InvntTot, wsize=-1)",InvnChg,time series,flow
+Balance Sheet,Receivables And Loans,TR.F.LoansRcvblTot,ReceivablesAndLoans,time series,stock
+Balance Sheet,Receivables,TR.F.RcvblTot,Receivables,time series,stock
+Balance Sheet,Total Current Assets,TR.F.TotCurrAssets,TotCurrAssets,time series,stock
+Balance Sheet,Provision - Doubtful Accounts,TR.F.ProvDoubtAcctTot,ProvDoubtAcct,time series,stock
+Balance Sheet,Fixed Assets,TR.PropertyPlantEquipmentTotalNet,FixedAssets,time series,stock
+Balance Sheet,PPE Total,TR.F.PPENetTot,PPENetTot,time series,stock
+Balance Sheet,Intangible Assets - Total - Net,TR.F.IntangTotNet,IntangTotNet,time series,stock
+Balance Sheet,Goodwill/Cost in Excess of Assets Purchased - Net,TR.F.GoodwCostInExcessOfAssetsPurchNet,Goodwill,time series,stock
+Balance Sheet,Total Non-Current Assets,"AVAIL(TR.F.TotAssets,TR.TotalAssetsReported)-ZAV(TR.F.TotCurrAssets)",TotNonCurrAssets,time series,stock
+Balance Sheet,Total Assets,TR.TotalAssetsReported,TotalAssets,time series,stock
+Balance Sheet,Operating Lease Liabilities - Current Portion/Short-Term,TR.F.OpLeaseLiabCurrPortST,OpLeaseLiabST,time series,stock
+Balance Sheet,Payables & Accrued Expenses,TR.F.PbleAccrExpn,PbleAccrExpn,time series,stock
+Balance Sheet,Accounts Payable,TR.F.AcctPble,AcctPble,time series,stock
+Balance Sheet,Accrued Expenses,TR.F.AccrExpn,AccrExpn,time series,stock
+Balance Sheet,Current Liabilities,TR.CurrentLiabilities,CurrentLiabilities,time series,stock
+Balance Sheet,LT Debt,TR.TotalLongTermDebt,TotalLongTermDebt,time series,stock
+Balance Sheet,Operating Lease Liabilities - Long-Term,TR.F.OpLeaseLiabLT,OpLeaseLiabLT,time series,stock
+Balance Sheet,Provisions,TR.F.Prov,Prov,time series,stock
+Balance Sheet,Provisions - Pension & Other,TR.F.PostEmpBenefPensOth,ProvEmpPens,time series,stock
+Balance Sheet,Provisions - Other than Pension & Post Retirement,TR.F.ProvOthThanPensPostRet,ProvOth,time series,stock
+Balance Sheet,Customer Advances - Total,TR.F.CustAdvTot,FCustAdvTot,time series,stock
+Balance Sheet,Deferred Revenue/Income,TR.F.DefRevInc,DefRevInc,time series,stock
+Balance Sheet,Total Non-Current Liabilities,TR.F.TotNonCurrLiab,TotNonCurrLiab,time series,stock
+Balance Sheet,Total Liabilities,TR.TotalLiabilities,TotalLiabilities,time series,stock
+Balance Sheet,Total Debt,TR.TotalDebtoutstanding,TotalDebt,time series,stock
+Balance Sheet,Total Shareholders Equity,TR.TotalEquity,TotalShareholdersEquity,time series,stock
+Balance Sheet,Preferred Stock,ZAV(TR.RedeemablePreferredTtl)+ZAV(TR.PreferredStockNonRedeemableNet),TotalPreferredStock,time series,stock
+Balance Sheet,Minority Interest,TR.MinorityInterestBSStmt,MinorityInterest,time series,stock
+Balance Sheet,Weight of Equity,ZAV(TR.CompanyMarketCap)/(ZAV(TR.CompanyMarketCap)+ZAV(TR.RedeemablePreferredTtl)+ZAV(TR.PreferredStockNonRedeemableNet)+ZAV(TR.TotalDebtoutstanding)),WeightEQ,time series,percent
+Balance Sheet,Weight of Preference,(ZAV(TR.RedeemablePreferredTtl)+ZAV(TR.PreferredStockNonRedeemableNet))/(ZAV(TR.CompanyMarketCap)+ZAV(TR.RedeemablePreferredTtl)+ZAV(TR.PreferredStockNonRedeemableNet)+ZAV(TR.TotalDebtoutstanding)),WeightPreference,time series,percent
+Balance Sheet,Weight of Debt,ZAV(TR.TotalDebtoutstanding)/(ZAV(TR.CompanyMarketCap)+ZAV(TR.RedeemablePreferredTtl)+ZAV(TR.PreferredStockNonRedeemableNet)+ZAV(TR.TotalDebtoutstanding)),WeightDebt,time series,percent
+Balance Sheet,Net Book Capital,TR.F.NetBookCap,NetBookCap,time series,stock
+Balance Sheet,Net Operating Assets,TR.F.NetOpAssets,NetOpAssets,time series,stock
+Balance Sheet,Provisions - Total,TR.F.ProvTot,ProvTot,time series,stock
+Balance Sheet,Unearned Revenue - Total,TR.F.UnearnRevTot,UnearnRevTot,time series,stock
+Balance Sheet,Accruals - Short-Term,TR.F.AccrualsST,AccrualsST,time series,stock
+Balance Sheet,Asset Accruals,TR.F.AssetAccruals,AssetAccruals,time series,stock
+Cash Flow Statement,Net Income,TR.NetIncomeStartingLine,NetIncomeCFStart,time series,flow
+Cash Flow Statement,Non-Cash Items,ZAV(TR.NonCashItems),NonCashItems,time series,stock
+Cash Flow Statement,Funds From Operations,TR.NetIncomeStartingLine+ZAV(TR.DepreciationDepletion)+ZAV(TR.Amortization)+ZAV(TR.NonCashItems)+ZAV(TR.DeferredTaxes),FundsFromOperations,time series,flow
+Cash Flow Statement,Cash From Operations,TR.CashFromOperatingAct,CashFromOperatingAct,time series,flow
+Cash Flow Statement,Capital Expenditures,TR.CapitalExpenditures,CapitalExpenditures,time series,flow
+Cash Flow Statement,Cash From Investments,TR.CashFromInvestingAct,CashFromInvestingAct,time series,flow
+Cash Flow Statement,Cash Dividends Paid,TR.CashDividendsPaid*(-1),CashDividendsPaid,time series,flow
+Cash Flow Statement,Stock Issuance/(Retirement) Net - Cash Flow,TR.F.StockTotIssuanceRetNetCF*(-1),StockTotIssuanceRetNet,time series,flow
+Cash Flow Statement,Common Stock Buyback - Net,TR.F.ComStockBuyBackNet,StockBuyBackNet,time series,flow
+Cash Flow Statement,Cash From Financing,TR.CashFromFinancingAct,CashFromFinancingAct,time series,flow
+Cash Flow Statement,Free Cash Flow to Equity,TR.F.FreeCashFlowtoEq,FreeCashFlowtoEq,time series,flow
+Cash Flow Statement,Free Cash Flow Net of Dividends,TR.F.FOCF,FOCF,time series,flow
+Cash Flow Statement,Levered Free Cash Flow,TR.F.LeveredFOCF,LeveredFOCF,time series,flow
+Cash Flow Statement,Unlevered Free Cash Flow,TR.F.UnLeveredFOCF,UnLeveredFOCF,time series,flow
+Cash Flow Statement,Dividends Provided/Paid - Common,TR.F.DivProvPaidCom,DivProvPaidCom,time series,flow
+Employee Data,# of Emp,TR.Employees,EmployeeNum,time series,stock
+Employee Data,Emp Grth,"PERCENT_CHG(TR.Employees, wsize=-1)",EmployeeGrth,time series,percent
+Employee Data,Rev/Emp,TR.RevenueperEmployeescalYrEnd,SalesPerEmployee,time series,ratio
+Per Share Metrics ,Cash&STInv,TR.TotCashAndShortTermInvestmentsperShare,TotCashAndSTInvPerShare,time series,ratio
+Per Share Metrics ,Total Debt,TR.TotalDebt,TotalDebtPerShare,time series,ratio
+Per Share Metrics ,WorkingCap,TR.WorkingCapitalperShare,WorkingCapPerShare,time series,ratio
+Per Share Metrics ,Book Value,TR.BookValuePerShare,BookValuePerShare,time series,ratio
+Per Share Metrics ,Sales,TR.RevenuePerShare,SalesPerShare,time series,ratio
+Per Share Metrics ,Cash Flow,TR.CashFlowtoShrdil,CashFlowToShrdill,time series,ratio
+Per Share Metrics ,Free CF,TR.FreeOperatingCashFlowperShareAvgDilutedSharesOut,FreeCFPerShrdill,time series,ratio
+Per Share Metrics ,Dividends,TR.DPSCommonStock,DividendPerStock,time series,ratio
+Per Share Metrics ,Earnings Per Share,TR.EPSActValue,EPS,time series,ratio
+Profitability,Gross Margin - Current,TR.GrossMargin,GrossMargin,time series,ratio
+Profitability,R/D Pct Sales - Current,"TR.ResearchAndDevelopment/AVAIL(TR.TotalRevenue,TR.BankTotalRevenue)",RandDtoSales,time series,ratio
+Profitability,SGA Pct Sales - Current,"TR.SGAExpenseTotal/AVAIL(TR.TotalRevenue,TR.BankTotalRevenue)",SGAtoSales,time series,ratio
+Profitability,EBITDA Margin - Current,TR.EBITDAMarginPercent,EBITDAMarginPct,time series,ratio
+Profitability,Operating Margin - Current,TR.OperProfitMarginPct,OperProfitMarginPct,time series,ratio
+Profitability,Pretax Margin - Current,TR.PretaxMarginPercent,PretaxMarginPct,time series,ratio
+Profitability,Net Margin - Current,TR.NetProfitMargin,NetProfitMargin,time series,ratio
+Profitability,CF/Sales - Current,TR.CashFlowMarginPercent/100,CashFlowMarginPct,time series,ratio
+Profitability,Tax Rate - Current,TR.IncomeTaxRatePct,TaxRate,time series,ratio
+Profitability,ROA - Current,TR.ROATotalAssetsPercent,ROA,time series,ratio
+Profitability,ROE - Current,TR.ReturnonAvgTotEqtyPctNetIncomeBeforeExtraItems,ROE,time series,ratio
+Profitability,Gross Margin - 5Y Avg,TR.GrossProfitMarginPct5YrAvg,GrossMargin5Y,time series,ratio
+Profitability,EBITDA Margin - 5Y Avg,TR.EBITDAMarginPct5YrAvg,EBITDAMargin5Y,time series,ratio
+Profitability,Operating Margin - 5Y Avg,TR.OperatingProfitMarginPct5YrAvg,OperProfitMargin5Y,time series,ratio
+Profitability,Pretax Margin - 5Y Avg,TR.IncomeBefTaxMarginpct5YrAvg,PretaxMargin5Y,time series,ratio
+Profitability,Net Margin - 5Y Avg,TR.IncomeAftTaxMarginpct5YrAvg,NetProfitMargin5Y,time series,ratio
+Profitability,CF/Sales - 5Y Avg,TR.CashFlowMarginPct5YrAvg/100,CashFlowMargin5Y,time series,ratio
+Profitability,Tax Rate - 5Y Avg,TR.IncomeTaxRatePct5YrAvg/100,TaxRate5Y,time series,ratio
+Profitability,ROA - 5Y Avg,TR.ReturnonAvgTotAssetsPctIncomeAfterTax5YrAvg,ROA5Y,time series,ratio
+Other Ratios,Current Assets/Current Liabilities,ZAV(TR.F.TotCurrAssets)/ZAV(TR.F.TotCurrLiab),CurrAssetToLiab,time series,ratio
+Other Ratios,Current Ratio,TR.F.CurrRatio,CurrentRatio,time series,ratio
+Other Ratios,Quick Ratio,TR.F.QuickRatio,QuickRatio,time series,ratio
+Other Ratios,Inventory Turnover,TR.F.InvntTurnover,InventoryTurnover,time series,ratio
+Other Ratios,Inventory / Total Assets,ZAV(TR.F.InvntTot)/ZAV(TR.TotalAssetsReported),InventoryToAssets,time series,ratio
+Other Ratios,Depreciation / PPE,ZAV(TR.DepreciationDepletion)/ZAV(TR.F.PPENetTot),DeprToPPE,time series,ratio
+Other Ratios,CAPEX / Total Assets,ZAV(TR.CapitalExpenditures)/ZAV(TR.TotalAssetsReported),CAPEXToAssets,time series,ratio
+Other Ratios,Debt / Equity,ZAV(TR.TotalDebtoutstanding)/ZAV(TR.TotalEquity),DebtToEquity,time series,ratio
+Other Ratios,Sales / Total Assets,"AVAIL(TR.TotalRevenue,TR.BankTotalRevenue)/ZAV(TR.TotalAssetsReported)",SalesToAssets,time series,ratio
+Other Ratios,Pretax Income / Sales,"ZAV(TR.NetIncomeBeforeTaxes)/AVAIL(TR.TotalRevenue,TR.BankTotalRevenue)",PretaxIncomeToSales,time series,ratio
+Other Ratios,Sales / Cash,"AVAIL(TR.TotalRevenue,TR.BankTotalRevenue)/ZAV(TR.F.CashCashEquivTot)",SalesToCash,time series,ratio
+Other Ratios,Free Cash Flow / Total Debt,ZAV(TR.F.LeveredFOCF)/ZAV(TR.TotalDebt),FCFToDebt,time series,ratio
+Other Ratios,Working Capital / Total Assets,ZAV(TR.WorkingCapital)/ZAV(TR.TotalAssetsReported),WCToAssets,time series,ratio
+Other Ratios,Operating Income / Total Assets,ZAV(TR.F.OpProfBefNonRecurIncExpn)/ZAV(TR.TotalAssetsReported),OpIncToAssets,time series,ratio
+Other Ratios,Percentage Long-Term Debt Repayment,"ZAV(NET_CHG(TR.TotalLongTermDebt, wsize=-1))/ZAV(TR.TotalLongTermDebt)",LTDebtRepayPct,time series,ratio
+Other Ratios,Cash dividend / Cash Flows,ZAV(TR.CashDividendsPaid)/ZAV(TR.F.LeveredFOCF),DivToFCF,time series,ratio
+Other,Order Backlog,TR.F.OrderBacklog,OrderBacklog,time series,stock
+Other,Accounts Receivable Turnover,TR.F.AcctRcvblTurnover,AcctRcvblTurnover,time series,ratio
+Other,Asset Turnover,TR.F.AssetTurnover,AssetTurnover,time series,ratio
+Other,FIFO - LIFO / pos = FIFO / neg = LIFO,TR.F.InvntLIFORsrv,FIFOvsLIFO,time series,stock
