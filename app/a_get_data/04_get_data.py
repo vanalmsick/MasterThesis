@@ -182,23 +182,24 @@ def get_handpicked_dataset():
                                                  api_key=my.get_credentials(credential='reuters_eikon_api'))
             #print('Error:', err)
 
-            df.columns = df.columns.str.upper()
-            df = df.rename(columns=col_rename_dict)
-            df = df[(df['Date'].notna() & ~df['Date'].isnull() & (df['Date'] != ''))]
-            df = df.replace(r'^\s*$', np.nan, regex=True)
-            df = df.replace('', np.nan, regex=True)
-            df = df.replace('NaN', np.nan, regex=True)
-            df = df.replace('Infinity', np.nan, regex=True)
-            df = df.replace('-Infinity', np.nan, regex=True)
-            numeric_cols = col_df[~col_df['Variable Type'].isin(['property', 'category'])]['Clear Name'].tolist()
-            df[numeric_cols] = df[numeric_cols].astype(float)
 
+            if df is not None:
+                if len(df) > 0:
+                    df.columns = df.columns.str.upper()
+                    df = df.rename(columns=col_rename_dict)
+                    df = df[(df['Date'].notna() & ~df['Date'].isnull() & (df['Date'] != ''))]
+                    df = df.replace(r'^\s*$', np.nan, regex=True)
+                    df = df.replace('', np.nan, regex=True)
+                    df = df.replace('NaN', np.nan, regex=True)
+                    df = df.replace('Infinity', np.nan, regex=True)
+                    df = df.replace('-Infinity', np.nan, regex=True)
+                    numeric_cols = col_df[~col_df['Variable Type'].isin(['property', 'category'])]['Clear Name'].tolist()
+                    df[numeric_cols] = df[numeric_cols].astype(float)
 
-            if df is not None and len(df) > 0:
-                if first_item:
-                    my.create_sql_tbl(df, conn=aws_conn, tbl_name='data_small', schema='reuters')
-                    first_item = False
-                my.df_insert_sql(conn=aws_conn, df=df, table='data_small', schema='reuters')
+                    if first_item:
+                        my.create_sql_tbl(df, conn=aws_conn, tbl_name='data_small', schema='reuters')
+                        first_item = False
+                    my.df_insert_sql(conn=aws_conn, df=df, table='data_small', schema='reuters')
             if err is not None:
                 err['request_id'] = id
                 my.submit_error(error_dict=err, conn=aws_conn, schema='reuters')
