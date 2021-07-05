@@ -197,6 +197,9 @@ def submit_error(error_dict, conn, schema):
     request_id = error_dict['request_id']
     error_type = error_dict['error_type']
     error_message = str(error_dict['error_message']).replace("'",'"')
+    if error_message[:14] == '[{"code": 416,' and len(error_message) > 41: # shorten if common error message
+        error_message = error_message[:40]
+    error_comps = str(error_dict['req_instruments']).replace("'",'"')
 
     if 'timestamp_iso' in error_dict:
         error_time = error_dict['timestamp_iso']
@@ -204,7 +207,7 @@ def submit_error(error_dict, conn, schema):
         error_time = datetime.datetime.now().isoformat()
 
     with conn.cursor() as cur:
-        SQL = """INSERT INTO {schema}.data_request_errors (request_id, error_time, error_type, error_message) VALUES ({request_id}, '{error_time}', '{error_type}', '{error_message}')""".format(schema=schema, request_id=request_id, error_time=error_time, error_type=error_type, error_message=error_message)
+        SQL = """INSERT INTO {schema}.data_request_errors (request_id, error_time, error_type, error_message, comps) VALUES ({request_id}, '{error_time}', '{error_type}', '{error_message}', '{comps}')""".format(schema=schema, request_id=request_id, error_time=error_time, error_type=error_type, error_message=error_message, comps=error_comps)
         cur.execute(SQL)
     conn.commit()
 

@@ -1,5 +1,5 @@
 ﻿Category,Name,Reuters Code,Clear Name,Data Type,Variable Type
-General,Data date,TR.TotalReturn.date,Date,time series,property
+General,Data date,TR.TotalReturn.date,data_date,time series,property
 General,Company Name,TR.CommonName,CompanyName,property,property
 General,Country,TR.HeadquartersCountry,HeadquartersCountry,property,category
 General,Exchange,TR.ExchangeName,ExchangeName,property,category
