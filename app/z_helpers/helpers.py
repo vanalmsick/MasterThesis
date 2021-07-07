@@ -8,6 +8,7 @@ import configparser
 from silx.io import dictdump
 from tqdm import tqdm
 import multiprocessing
+import eikon as ek
 
 
 ######################################### GENERAL #########################################
@@ -245,6 +246,34 @@ def create_wrds_sql_query(library='comp', table='company', columns='*', conditio
 
     sql = ("SELECT{distinct} {cols} FROM {schema}.{table} {condition} {obsstmt} OFFSET {offset};".format(cols=cols, distinct=dis, schema=library, table=table, condition=cond, obsstmt=obsstmt, offset=offset))
     return sql
+
+
+
+def reuters_eikon_data_scraper(instruments: list, fields: list, properties:dict, api_key:str):
+    df, err = None, None
+    ek.set_app_key(api_key)
+    try:
+        df, err = ek.get_data(instruments, fields, properties, field_name=True, raw_output=False)
+        if err is not None:
+            err = {'error_type': 'REUTERS', 'error_message': str(err), 'req_instruments': instruments, 'req_fields': fields, 'req_properties': properties}
+        else:
+            df.columns = [i.replace('.', '_') for i in df.columns.tolist()]
+    except Exception as error:
+        err = {'error_type': 'PyREUTERS', 'error_message': str(error).replace('\n', ';').encode(), 'req_instruments': instruments, 'req_fields': fields, 'req_properties':properties}
+    finally:
+        return df, err
+
+
+def wrds_compustat_data_scraper(conn, sql):
+    df, err = None, None
+    try:
+        df = conn.raw_sql(sql)
+    except Exception as error:
+        err = {'error_type': 'PyWRDS', 'error_message': str(error).replace('\n', ';').encode(), 'req_sql': sql}
+    finally:
+        return df, err
+
+
 
 
 

@@ -93,8 +93,8 @@ Balance Sheet,Cash & Equivalents Total,TR.F.CashCashEquivTot,CashTotal,time seri
 Balance Sheet,Working Capital,TR.WorkingCapital,WC,time series,stock
 Balance Sheet,Inventory,TR.F.InvntTot,Inventory,time series,stock
 Balance Sheet,Inventory Change,"NET_CHG(TR.F.InvntTot, wsize=-1)",InvnChg,time series,flow
-Balance Sheet,Receivables And Loans,TR.F.LoansRcvblTot,ReceivablesAndLoans,time series,stock
-Balance Sheet,Receivables,TR.F.RcvblTot,Receivables,time series,stock
+Balance Sheet,Receivables And Loans,TR.F.LoansRcvblTot,ReceivablesAndLoansTotal,time series,stock
+Balance Sheet,Receivables And Loans Short Term,TR.F.LoansRcvblNetST,ReceivablesAndLoansST,time series,stock
 Balance Sheet,Total Current Assets,TR.F.TotCurrAssets,TotCurrAssets,time series,stock
 Balance Sheet,Provision - Doubtful Accounts,TR.F.ProvDoubtAcctTot,ProvDoubtAcct,time series,stock
 Balance Sheet,Fixed Assets,TR.PropertyPlantEquipmentTotalNet,FixedAssets,time series,stock
@@ -113,7 +113,7 @@ Balance Sheet,Operating Lease Liabilities - Long-Term,TR.F.OpLeaseLiabLT,OpLease
 Balance Sheet,Provisions,TR.F.Prov,Prov,time series,stock
 Balance Sheet,Provisions - Pension & Other,TR.F.PostEmpBenefPensOth,ProvEmpPens,time series,stock
 Balance Sheet,Provisions - Other than Pension & Post Retirement,TR.F.ProvOthThanPensPostRet,ProvOth,time series,stock
-Balance Sheet,Customer Advances - Total,TR.F.CustAdvTot,FCustAdvTot,time series,stock
+Balance Sheet,Customer Advances - Total,TR.F.CustAdvTot,CustAdvTot,time series,stock
 Balance Sheet,Deferred Revenue/Income,TR.F.DefRevInc,DefRevInc,time series,stock
 Balance Sheet,Total Non-Current Liabilities,TR.F.TotNonCurrLiab,TotNonCurrLiab,time series,stock
 Balance Sheet,Total Liabilities,TR.TotalLiabilities,TotalLiabilities,time series,stock
@@ -196,3 +196,4 @@ Other,Order Backlog,TR.F.OrderBacklog,OrderBacklog,time series,stock
 Other,Accounts Receivable Turnover,TR.F.AcctRcvblTurnover,AcctRcvblTurnover,time series,ratio
 Other,Asset Turnover,TR.F.AssetTurnover,AssetTurnover,time series,ratio
 Other,FIFO - LIFO / pos = FIFO / neg = LIFO,TR.F.InvntLIFORsrv,FIFOvsLIFO,time series,stock
+Other,Dividend Tax Rate,TR.DivTaxRate,DivTaxRate,time series,percent
