@@ -40,6 +40,23 @@ def industry_average(df, time_cols=['period_year', 'period_qrt'], industry_cols=
     return df_cp
 
 
+def compare_against_industry(df_comps, df_industry, time_cols, industry_col, as_int=False):
+    comb = df_comps.merge(df_industry, on=time_cols + [industry_col], how="left", suffixes=("_comp", "_ind"))
+    cols = df_comps.columns.tolist()
+    cols = [i for i in cols if i in df_industry.columns.tolist() and i not in time_cols and i != industry_col]
+    new_df = comb[time_cols + [industry_col]].copy()
+    for col in cols:
+        if pd.api.types.is_numeric_dtype(comb[col + '_comp']):
+            if as_int:
+                new_df[col] = (comb[col + '_comp'] >= comb[col + '_ind']).astype(int)
+            else:
+                new_df[col] = (comb[col + '_comp'] >= comb[col + '_ind'])
+        else:
+            new_df[col] = np.nan
+    return new_df
+
+
+
 
 def lev_thiagaranjan_signs(df_abs, df_pct, iter_col, company_col):
     new_df = df_pct[[company_col] + iter_col].copy()
@@ -98,8 +115,8 @@ def ou_pennmann_signs(df_abs, df_pct, iter_col, company_col):
     return new_df
 
 
-def xue_zhang_signs(df_abs, df_pct, iter_col, company_col):
-    new_df = df_pct[[company_col] + iter_col].copy()
+def xue_zhang_signs(df_abs, df_pct, iter_col, company_col, industry_col):
+    new_df = df_abs[[company_col] + [industry_col] + iter_col].copy()
     # ToDo: Binarize by  comparing against industry avg
     new_df['1_profit margin'] = df_pct['netprofitmargin']
     new_df['2_ROA'] = df_abs['roa']
@@ -113,7 +130,11 @@ def xue_zhang_signs(df_abs, df_pct, iter_col, company_col):
     new_df['10_Quick Ratio'] = df_pct['quickratio']
     new_df['11_Working Capital'] = df_pct['wc']
 
-    return new_df
+    df_ind_avg = industry_average(new_df, time_cols=time_cols, industry_cols=[industry_col], reset_index=True)
+
+    dummy_comp_vs_ind = compare_against_industry(df_comps=new_df, df_industry=df_ind_avg, time_cols=time_cols, industry_col=industry_col, as_int=True)
+
+    return dummy_comp_vs_ind
 
 
 
@@ -137,6 +158,6 @@ if __name__ == '__main__':
 
     df_lev_thi = lev_thiagaranjan_signs(df_abs=df, df_pct=df_pct, iter_col=time_cols, company_col=comp_col)
     df_ou_penn = ou_pennmann_signs(df_abs=df, df_pct=df_pct, iter_col=time_cols, company_col=comp_col)
-    df_xue_zha = xue_zhang_signs(df_abs=df, df_pct=df_pct, iter_col=time_cols, company_col=comp_col)
+    df_xue_zha = xue_zhang_signs(df_abs=df, df_pct=df_pct, iter_col=time_cols, company_col=comp_col, industry_col=industry_col)
 
     print(df_lev_thi, df_ou_penn, df_xue_zha)
