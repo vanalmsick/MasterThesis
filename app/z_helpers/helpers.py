@@ -1,4 +1,4 @@
-import sys, os, pathlib, warnings, datetime, mlflow, json, tabulate
+import sys, os, pathlib, warnings, datetime, mlflow, json, tabulate, hashlib
 import datetime as dt
 import tables as tb
 import pandas as pd
@@ -81,6 +81,40 @@ def get_credentials(credential=None, cred_dir=None, dir_dict=None, **kwargs):
         return creds
     else:
         return creds[credential]
+
+
+
+
+def data_hash(self, *args):
+    str_args = (str(args)[1:-1]).replace("'", "").replace(", ", "/")
+    hash = hashlib.shake_256(str_args.encode()).hexdigest(5)
+    return hash
+
+
+
+
+def highlight_dataframe_differences(df1, df2):
+    """Identify differences between two pandas DataFrames"""
+    assert (df1.columns == df2.columns).all(), \
+        "DataFrame column names are different"
+    if any(df1.dtypes != df2.dtypes):
+        "Data Types are different, trying to convert"
+        df2 = df2.astype(df1.dtypes)
+    if df1.equals(df2):
+        return None
+    else:
+        # need to account for np.nan != np.nan returning True
+        diff_mask = (df1 != df2) & ~(df1.isnull() & df2.isnull())
+        ne_stacked = diff_mask.stack()
+        changed = ne_stacked[ne_stacked]
+        changed.index.names = ['id', 'col']
+        difference_locations = np.where(diff_mask)
+        changed_from = df1.values[difference_locations]
+        changed_to = df2.values[difference_locations]
+        return pd.DataFrame({'from': changed_from, 'to': changed_to},
+                            index=changed.index)
+
+
 
 
 

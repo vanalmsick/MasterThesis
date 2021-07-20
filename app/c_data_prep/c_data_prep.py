@@ -7,36 +7,9 @@ import tensorflow as tf
 ### Add other shared functions ###
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 import z_helpers as my
-
-
 ##################################
 
 
-def _download_data_from_sql(data_version='final_data', recache=False):
-    data_dict = {'final_data': 'final_data',
-                 'final_data_2': 'final_data_2'}
-    query = "SELECT * FROM {}".format(data_dict[data_version])
-
-    param_dic = my.get_credentials(credential='aws')
-
-    cache_folder = os.path.join(my.get_project_directories(key='cache_dir'), 'raw_data')
-    data_file = os.path.join(cache_folder, (data_version + '.csv'))
-    if not os.path.exists(cache_folder):
-        os.makedirs(cache_folder)
-
-    if recache or not os.path.exists(data_file):
-        print('Getting raw data via sql...')
-
-        with my.postgresql_connect(param_dic) as conn:
-            df = pd.read_sql_query(query, con=conn)
-            df.to_csv(data_file, index=False)
-        print('Raw data cached.')
-
-    else:
-        print('Raw data already cached.')
-        df = pd.read_csv(data_file, index_col=False)
-
-    return df, data_file
 
 
 
@@ -69,7 +42,8 @@ class data_prep:
         df, self.raw_file_path = _download_data_from_sql(data_version=self.dataset, recache=self.recache)
 
         dataset_pops = {'final_data':   {'iter_col': ['period_year', 'period_qrt'], 'company_col': 'gvkey', 'y_col': ['tr_f_ebit'], 'category_cols': ['gsector', 'ggroup'], 'date_cols': []},
-                        'final_data_2': {'iter_col': ['period_year', 'period_qrt'], 'company_col': 'gvkey', 'y_col': ['tr_f_ebit'], 'category_cols': ['gsector', 'ggroup'], 'date_cols': []}}
+                        'final_data_2': {'iter_col': ['period_year', 'period_qrt'], 'company_col': 'gvkey', 'y_col': ['tr_f_ebit'], 'category_cols': ['gsector', 'ggroup'], 'date_cols': []},
+                        'handpicked_dataset': {'iter_col': ['data_year', 'data_qrt'], 'company_col': 'ric', 'y_col': ['roe'], 'category_cols': ['headquarterscountry', 'industry', 'sector', 'marketcapcurrency', 'analystrecom'], 'date_cols': []}}
 
         self.dataset_iter_col = dataset_pops[self.dataset]['iter_col']
         self.dataset_company_col = dataset_pops[self.dataset]['company_col']
@@ -988,7 +962,7 @@ if __name__ == '__main__':
     # ToDo: add block normalization
 
 
-    data = data_prep(dataset='final_data_2', recache=False, keep_raw_cols='default', drop_cols='default')
+    data = data_prep(dataset='handpicked_dataset', recache=False, keep_raw_cols='default', drop_cols='default')
 
     data.window(input_width=5*4, pred_width=4, shift=1)
 

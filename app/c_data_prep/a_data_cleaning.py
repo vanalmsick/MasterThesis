@@ -593,33 +593,37 @@ class dataset_nan_fill:
 
 
 
-def get_clean_data(data_version, recache, comp_col, time_cols):
-    df, data_file, data_props, fillnan_formulas = _download_data_from_sql(data_version=dataset_name, recache=recache_data)
+def get_clean_data(data_version, recache, comp_col='ric', time_cols=['data_year', 'data_qrt'], industry_col='industry'):
 
-    # Get column type infos
-    if data_version == 'handpicked_dataset':
-        handpicked_dataset_col_infos = pd.read_csv('a_get_data/reuters_eikon/key_reuters_fields.csv')[['Clear Name', 'Data Type', 'Variable Type']]
-        for col in handpicked_dataset_col_infos.columns.tolist():
-            handpicked_dataset_col_infos[col] = handpicked_dataset_col_infos[col].str.lower()
+    cache_folder = os.path.join(my.get_project_directories(key='cache_dir'), 'cleaned_data')
+    my_hash = my.data_hash(data_version, comp_col, time_cols, industry_col)
+    cache_file = os.path.join(cache_folder, my_hash + '.csv')
+
+    if recache or not os.path.exists(cache_file):
+        print('Cleaned data not cached...')
+
+        df, data_file, data_props, fillnan_formulas = _download_data_from_sql(data_version=data_version, recache=recache)
+
+        df.replace([np.inf, -np.inf], np.nan, inplace=True)
+        df = df[df['sales'] > 0]
+        df = df[df['eps'].notna()]
+        df = df[df['ebit'].notna()]
+        dataset_nan_fill(df, company_col=comp_col, time_cols=time_cols, industry_col=industry_col, data_props = data_props, fillnan_formulas=fillnan_formulas, formula_iterations=3)
+
+        #all_count = df.groupby(level=[1, 2]).count()
+        #col_count = all_count.median(axis=0)
+        #additional_drop_cols = col_count[col_count < 20].index.tolist()
+        #print('These cols have less than 20 entries condsider dropping please')
+        #col_count = col_count / col_count['companyname']
+        #col_count.to_csv('result_col_count.csv')
+
+        df.to_csv(cache_file)
+
     else:
-        handpicked_dataset_col_infos = None
+        print('Cleaned data already cached.')
+        df = pd.read_csv(cache_file)
 
-
-
-    #df = df.select_dtypes(include='number')
-    df.replace([np.inf, -np.inf], np.nan, inplace=True)
-    df = df[df['sales'] > 0]
-    dataset_nan_fill(df, company_col='ric', time_cols=['data_year', 'data_qrt'], industry_col='industry', data_props = data_props, fillnan_formulas=fillnan_formulas, formula_iterations=3)
-
-    all_count = df.groupby(level=[1, 2]).count()
-
-    col_count = all_count.median(axis=0)
-    additional_drop_cols = col_count[col_count < 20].index.tolist()
-    print('These cols have less than 20 entries condsider dropping please')
-    col_count = col_count / col_count['companyname']
-    col_count.to_csv('result_col_count.csv')
-
-
+    return df
 
 
 
@@ -628,7 +632,9 @@ if  __name__ == '__main__':
     recache_data = False
     comp_col = 'ric'
     time_cols = ['data_year', 'data_qrt']
+    industry_col = 'industry'
 
     my.convenience_settings()
 
-    get_clean_data(data_version=dataset_name, recache=recache_data, comp_col=comp_col, time_cols=time_cols)
+    df = get_clean_data(data_version=dataset_name, recache=recache_data, comp_col=comp_col, time_cols=time_cols, industry_col=industry_col)
+    print(df)
