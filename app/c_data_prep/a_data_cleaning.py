@@ -3,6 +3,7 @@ import pickle, warnings
 import pandas as pd
 import numpy as np
 import pmdarima as pm
+from sklearn.linear_model import LinearRegression
 
 ### Add other shared functions ###
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
@@ -211,8 +212,14 @@ class dataset_nan_fill:
                         partial_arr = partial_df[col].values
                         # Check for nan/missing values
                         if np.isnan(partial_arr).any():
+                            entire_mean_df = None
+                            if 'approx' in str(methods):
+                                tmp_approx_df = df[df[industry_col] == ric_industry_mapping[ric]].copy()
+                                tmp_approx_df = tmp_approx_df.reset_index().set_index(time_cols)
+                                tmp_approx_df.sort_index(inplace=True)
+                                entire_mean_df = tmp_approx_df.loc[slice(partial_df.index[0][1:], partial_df.index[-1][1:])]
                             tmp_mean = fill_mean_df.loc[(ric_industry_mapping[ric])].loc[slice(partial_df.index[0][1:], partial_df.index[-1][1:])][col].values
-                            partial_arr = self._all_in_one(arr=partial_arr, partial_df=partial_df, col=col, methods=methods, mean_df=tmp_mean)
+                            partial_arr = self._all_in_one(arr=partial_arr, partial_df=partial_df, col=col, methods=methods, mean_df=tmp_mean, entire_mean_df=entire_mean_df)
                             partial_df[col] = partial_arr
                 df.loc[(ric)] = partial_df
         df.to_csv('after_nan_filling.csv', index=True)
@@ -276,7 +283,7 @@ class dataset_nan_fill:
 
 
 
-    def _all_in_one(self, arr, partial_df, col, methods, mean_df=None):
+    def _all_in_one(self, arr, partial_df, col, methods, mean_df=None, entire_mean_df=None):
         """
         >>> self = dataset_nan_fill(df=pd.DataFrame())
         >>> import numpy as np
@@ -342,6 +349,15 @@ class dataset_nan_fill:
                                 # ToDo: columnname & periods as kwargs
                                 pass
 
+                            elif method['formula'] == 'approx':
+                                other_cols = method['kwargs']['other']
+                                if other_cols.find('[') != -1:
+                                    other_cols = other_cols.strip('][').split(', ')
+                                else:
+                                    other_cols = [other_cols]
+                                other_cols = [i.lower() for i in other_cols]
+                                tmp_fill_values = self._fill_linear_approx_column(arr=todo_dict['arr'], partial_df=partial_df, col=col, other_cols=other_cols, case=todo_dict['case'], x=todo_dict['idx'][0], y=todo_dict['idx'][1], offset=todo_dict['offset'], entire_mean_df=entire_mean_df)
+                                fill_values.extend(tmp_fill_values)
                             else:
                                 warnings.warn(f"Unknown Fill NaN method formula '{method['formula']}'")
 
@@ -503,6 +519,44 @@ class dataset_nan_fill:
         else:
             print('dfghj')
         return new_nan
+
+    def _fill_linear_approx_column(self, arr, partial_df, col, other_cols, case, x, y, offset, entire_mean_df=None):
+        new_nan = []
+        if case == 'nothing': # fill with industry approx
+            entire_mean_df = entire_mean_df.copy()
+            train_X = entire_mean_df[other_cols + [col]].dropna()[other_cols].values
+            train_y = entire_mean_df[other_cols + [col]].dropna()[[col]].values
+            pred_X = partial_df[other_cols].values
+            pred_X = np.append(np.ones((pred_X.shape[0], 1)), pred_X, axis=1)
+            train_X = np.append(np.ones((train_X.shape[0], 1)), train_X, axis=1)
+            if len(train_y) == 0 and len(train_X) == 0:
+                return []
+            reg = LinearRegression().fit(train_X, train_y)
+            fill_arr = reg.predict(pred_X)
+
+        else: # use existing data to fill
+            if case == 'end':
+                train_X = partial_df.iloc[:x][other_cols].values
+                train_y = partial_df.iloc[:x][[col]].values
+                pred_X = partial_df.iloc[x:][other_cols].values
+            elif case == 'start':
+                train_X = partial_df.iloc[y+1:][other_cols].values
+                train_y = partial_df.iloc[y+1:][[col]].values
+                pred_X = partial_df.iloc[:y+1][other_cols].values
+            pred_X = np.append(np.ones((pred_X.shape[0], 1)), pred_X, axis=1)
+            train_X = np.append(np.ones((train_X.shape[0], 1)), train_X, axis=1)
+            reg = LinearRegression().fit(train_X, train_y)
+            fill_arr = reg.predict(pred_X)
+            #arr[x:y+1] = fill_arr.flatten()
+
+
+        for i in range(x, y + 1):
+            new_nan.append((i, float(fill_arr[i-x])))
+
+        return new_nan
+
+
+
 
 
 

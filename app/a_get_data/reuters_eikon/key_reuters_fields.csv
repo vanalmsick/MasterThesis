@@ -67,7 +67,7 @@ Valuation Ratios,P/SALES - 4Y,TR.PToREVMeanEst(Period=FY4),PtoSales4Y,time serie
 Valuation Ratios,EV/REVS - 4Y,TR.EV/TR.RevenueMeanEstimate(Period=FY4),EVtoSales4Y,time series,ratio,,,
 Valuation Ratios,EV/EBITDA - 4Y,TR.EV/TR.EBITDAMean(Period=FY4),EVtoEBITDA4Y,time series,ratio,,,
 Income Statement,Sales,"AVAIL(TR.TotalRevenue,TR.BankTotalRevenue)",Sales,time series,flow,,,
-Income Statement,COGS,TR.F.COGSTot,COGS,time series,flow,formula:100-GrossMargin*Sales,,
+Income Statement,COGS,TR.F.COGSTot,COGS,time series,flow,formula:100-GrossMargin*Sales,method:approx(other=Sales),
 Income Statement,Operating Expense,TR.F.OpExpn,OpExpn,time series,flow,formula:Sales-GrossProfit,,
 Income Statement,Gross Income,TR.GrossProfit,GrossProfit,time series,flow,formula:Sales-OpExpn,formula:EBITDA+SGA+RandD,
 Income Statement,Rental/Operating Lease Expense,TR.F.RentalOpLeaseExpn,RentalOpLeaseExpn,time series,flow,value:0,,
