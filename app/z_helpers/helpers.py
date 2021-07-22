@@ -150,7 +150,7 @@ def _dtype_mapping():
 def _gen_tbl_cols_sql(df):
     dmap = _dtype_mapping()
     sql = ""
-    df1 = df.rename(columns = {"" : "nocolname"})
+    df1 = df.rename(columns = {"" : "nocolname", np.nan : "nocolname"})
     hdrs = df1.dtypes.index
     hdrs_list = [(hdr, str(df1[hdr].dtype)) for hdr in hdrs]
     for i, hl in enumerate(hdrs_list):

@@ -14,7 +14,7 @@ import z_helpers as my
 def _download_data_from_sql(data_version='final_data', recache=False):
     data_dict = {'final_data': 'final_data',
                  'final_data_2': 'final_data_2',
-                 'handpicked_dataset': 'entire_small_dataset'}
+                 'handpicked_dataset': 'entire_small_dataset2'}
     query = "SELECT * FROM {}".format(data_dict[data_version])
 
     param_dic = my.get_credentials(credential='aws')
@@ -417,7 +417,10 @@ class dataset_nan_fill:
         if cols[0] == '':
             tmp = 0
         else:
-            tmp = nan_df[cols[0]]
+            if cols[0].isnumeric():
+                tmp = float(cols[0])
+            else:
+                tmp = nan_df[cols[0]]
         for i in range(len(signs)):  # For columns
             sign = signs[i]
             sign_col = cols[i + 1]
