@@ -2,7 +2,6 @@ import tensorflow as tf
 import z_helpers as my_helpers
 from NN_tensorflow_models import compile_and_fit, evaluate_model
 
-
 def main_run_linear_models(train_ds, val_ds, test_ds, val_performance_dict, test_performance_dict, data_props, examples=None):
 
     linear = tf.keras.Sequential([tf.keras.layers.Dense(units=1)])

@@ -138,10 +138,11 @@ if __name__ == '__main__':
 
 
 
-    data = my_prep.data_prep(dataset='final_data_2', recache=False, keep_raw_cols='default', drop_cols='default')
+
+    data = my_prep.data_prep(dataset='handpicked_dataset2', recache=False, keep_raw_cols='default', drop_cols='default')
     data.window(input_width=5 * 4, pred_width=4, shift=1)
     data.block_rolling_split(val_comp_size=0, test_comp_size=0, train_time_steps=5 * 4 * 2, val_time_steps=1, test_time_steps=1, shuffle=True)
-    data.normalize(method='set')
+    data.normalize(method='time')
     data.compute()
 
     out = data['200201_201903']

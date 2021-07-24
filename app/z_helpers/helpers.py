@@ -84,6 +84,26 @@ def get_credentials(credential=None, cred_dir=None, dir_dict=None, **kwargs):
 
 
 
+def df_iloc_several_ranges(df, *tuple_pairs):
+    """
+    Input pairs of tuples for index slicing
+    """
+    len_df = len(df)
+
+    # Create an array with values to use as an index
+    num_range = np.zeros(shape=(len_df,), dtype=bool)
+
+    # Update
+    for (start, end) in tuple_pairs:
+        if start is None:
+            start = 0
+        if end is None:
+            end = len_df
+        num_range[start:end] = True
+
+    return df.iloc[num_range]
+
+
 
 def data_hash(self, *args):
     str_args = (str(args)[1:-1]).replace("'", "").replace(", ", "/")

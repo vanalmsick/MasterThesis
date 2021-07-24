@@ -3,6 +3,7 @@ import numpy as np
 import wrds
 import eikon as ek
 import sys, os, ast, progressbar, time, warnings
+import datetime as dt
 
 
 ### Add other shared functions ###
@@ -58,8 +59,8 @@ def get_handpicked_dataset():
         df = df.drop_duplicates(subset=['ric'], keep='first')
         df.drop(columns=['filled_sorter'], inplace=True)
         df = df.sort_values('ric', ascending=True)
-        my.create_sql_tbl(df, conn=aws_conn, tbl_name='data_small_props', schema='reuters')
-        my.df_insert_sql(conn=aws_conn, df=df, table='data_small_props', schema='reuters')
+        my.create_sql_tbl(df, conn=aws_conn, tbl_name='data_small_props2', schema='reuters')
+        my.df_insert_sql(conn=aws_conn, df=df, table='data_small_props2', schema='reuters')
         print('Got company properties.')
 
 
@@ -113,6 +114,10 @@ def get_handpicked_dataset():
                         df['data_year'] = df['data_date'].str[:4].astype(int)
                         df['data_month'] = df['data_date'].str[5:7].astype(int)
                         df['data_day'] = df['data_date'].str[8:10].astype(int)
+                        # ToDo: fix wrong quarters
+                        df_date = df['data_date'].str[:10]
+                        df_date = dt.datetime.strptime(df_date, '%y-%m-%d') + dt.timedelta(days=20)
+                        df_qrt = (df_date.month + 2) // 3 - 1
                         df['data_qrt'] = df['data_month'] // 3
                         df['year_qrt_id'] = (df['data_year'] - 1950) * 4 + df['data_qrt']
 
@@ -120,9 +125,9 @@ def get_handpicked_dataset():
                         df.drop(columns=['filled_sorter'], inplace=True)
                         df = df.sort_values(['ric', 'year_qrt_id'], ascending=True)
                         if first_item:
-                            my.create_sql_tbl(df, conn=aws_conn, tbl_name='data_small', schema='reuters')
+                            my.create_sql_tbl(df, conn=aws_conn, tbl_name='data_small2', schema='reuters')
                             first_item = False
-                        my.df_insert_sql(conn=aws_conn, df=df, table='data_small', schema='reuters')
+                        my.df_insert_sql(conn=aws_conn, df=df, table='data_small2', schema='reuters')
             if err is not None:
                 err['request_id'] = id
                 my.submit_error(error_dict=err, conn=aws_conn, schema='reuters')

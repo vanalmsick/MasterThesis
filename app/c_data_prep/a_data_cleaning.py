@@ -15,7 +15,7 @@ import z_helpers as my
 def _download_data_from_sql(data_version='final_data', recache=False):
     data_dict = {'final_data': 'final_data',
                  'final_data_2': 'final_data_2',
-                 'handpicked_dataset': 'entire_small_dataset2'}
+                 'handpicked_dataset': 'entire_small_dataset2_unique'}
     query = "SELECT * FROM {}".format(data_dict[data_version])
 
     param_dic = my.get_credentials(credential='aws')
@@ -218,7 +218,11 @@ class dataset_nan_fill:
                                 tmp_approx_df = tmp_approx_df.reset_index().set_index(time_cols)
                                 tmp_approx_df.sort_index(inplace=True)
                                 entire_mean_df = tmp_approx_df.loc[slice(partial_df.index[0][1:], partial_df.index[-1][1:])]
-                            tmp_mean = fill_mean_df.loc[(ric_industry_mapping[ric])].loc[slice(partial_df.index[0][1:], partial_df.index[-1][1:])][col].values
+                            #if len(partial_df) == 1:
+                            #    idx = partial_df.index[0][1:]
+                            #else:
+                            idx = slice(partial_df.index[0][1:], partial_df.index[-1][1:])
+                            tmp_mean = fill_mean_df.loc[(ric_industry_mapping[ric])].loc[idx][col].values
                             partial_arr = self._all_in_one(arr=partial_arr, partial_df=partial_df, col=col, methods=methods, mean_df=tmp_mean, entire_mean_df=entire_mean_df)
                             partial_df[col] = partial_arr
                 df.loc[(ric)] = partial_df
@@ -333,40 +337,47 @@ class dataset_nan_fill:
             if np.isnan(arr).any():  # Check if still NaNs left
                 fill_values = []
                 if method['type'] == 'method':
-                        nan_todos = self._get_nan_blocks(arr=tmp_arr)
-                        for todo_dict in nan_todos:
-                            if method['formula'] == 'linear_or_mean' or method['formula'] == 'linear' or method['formula'] == 'linear_or_0':
-                                if 'or' in method['kwargs']:
-                                    if method['kwargs']['or'].lower() == 'nan':
-                                        mean_df = np.nan
-                                    else:
-                                        mean_df = float(method['kwargs']['or'])
-                                elif method['formula'] == 'linear_or_0':
-                                    mean_df = 0
-                                tmp_fill_values = self._fill_linear(arr=todo_dict['arr'], case=todo_dict['case'], x=todo_dict['idx'][0], y=todo_dict['idx'][1], offset=todo_dict['offset'], mean_df=mean_df)
-                                fill_values.extend(tmp_fill_values)
-                            elif method['formula'] == 'avg':
-                                # ToDo: columnname & periods as kwargs
-                                pass
-
-                            elif method['formula'] == 'approx':
-                                other_cols = method['kwargs']['other']
-                                if other_cols.find('[') != -1:
-                                    other_cols = other_cols.strip('][').split(', ')
+                    nan_todos = self._get_nan_blocks(arr=tmp_arr)
+                    for todo_dict in nan_todos:
+                        if method['formula'] == 'linear_or_mean' or method['formula'] == 'linear' or method['formula'] == 'linear_or_0':
+                            if 'or' in method['kwargs']:
+                                if method['kwargs']['or'].lower() == 'nan':
+                                    mean_df = np.nan
                                 else:
-                                    other_cols = [other_cols]
-                                other_cols = [i.lower() for i in other_cols]
-                                tmp_fill_values = self._fill_linear_approx_column(arr=todo_dict['arr'], partial_df=partial_df, col=col, other_cols=other_cols, case=todo_dict['case'], x=todo_dict['idx'][0], y=todo_dict['idx'][1], offset=todo_dict['offset'], entire_mean_df=entire_mean_df)
-                                fill_values.extend(tmp_fill_values)
-                            else:
-                                warnings.warn(f"Unknown Fill NaN method formula '{method['formula']}'")
+                                    mean_df = float(method['kwargs']['or'])
+                            elif method['formula'] == 'linear_or_0':
+                                mean_df = 0
+                            tmp_fill_values = self._fill_linear(arr=todo_dict['arr'], case=todo_dict['case'], x=todo_dict['idx'][0], y=todo_dict['idx'][1], offset=todo_dict['offset'], mean_df=mean_df)
+                            fill_values.extend(tmp_fill_values)
+                        elif method['formula'] == 'avg':
+                            # ToDo: columnname & periods as kwargs
+                            pass
 
-                        if qrt_data:
-                            new_fill_values = []
-                            for i, value in fill_values:
-                                for j in range(idx_mapping[i][0], idx_mapping[i][1]):
-                                    new_fill_values.append((j, value))
-                            fill_values = new_fill_values
+                        elif method['formula'] == 'approx':
+                            # do later
+                            pass
+                        else:
+                            warnings.warn(f"Unknown Fill NaN method formula '{method['formula']}'")
+
+                    if qrt_data and method['formula'] != 'approx':
+                        new_fill_values = []
+                        for i, value in fill_values:
+                            for j in range(idx_mapping[i][0], idx_mapping[i][1]):
+                                new_fill_values.append((j, value))
+                        fill_values = new_fill_values
+
+                    if method['formula'] == 'approx':
+                        other_cols = method['kwargs']['other']
+                        if other_cols.find('[') != -1:
+                            other_cols = other_cols.strip('][').split(', ')
+                        else:
+                            other_cols = [other_cols]
+                        other_cols = [i.lower() for i in other_cols]
+                        tmp_fill_values = self._fill_linear_approx_column(arr=todo_dict['arr'], partial_df=partial_df, col=col, other_cols=other_cols, x=todo_dict['idx'][0], y=todo_dict['idx'][1], offset=todo_dict['offset'], entire_mean_df=entire_mean_df)
+                        fill_values.extend(tmp_fill_values)
+                        if len(arr) != len(partial_df):
+                            print('ERROR')
+
 
                 elif method['type'] == 'value' or method['type'] == 'number':
                     number = float(method['formula'])
@@ -383,7 +394,8 @@ class dataset_nan_fill:
 
                 for i, value in fill_values:
                     if np.isnan(arr[i]):
-                        arr[i] = value
+                        if value not in [np.nan, np.inf, -np.inf]:
+                            arr[i] = value
 
         return arr
 
@@ -520,9 +532,10 @@ class dataset_nan_fill:
             print('dfghj')
         return new_nan
 
-    def _fill_linear_approx_column(self, arr, partial_df, col, other_cols, case, x, y, offset, entire_mean_df=None):
+    def _fill_linear_approx_column(self, arr, partial_df, col, other_cols, x, y, offset, entire_mean_df=None):
+        case_nothing = len(partial_df[other_cols + [col]].dropna()) == 0
         new_nan = []
-        if case == 'nothing': # fill with industry approx
+        if case_nothing: # fill with industry approx
             entire_mean_df = entire_mean_df.copy()
             train_X = entire_mean_df[other_cols + [col]].dropna()[other_cols].values
             train_y = entire_mean_df[other_cols + [col]].dropna()[[col]].values
@@ -535,16 +548,18 @@ class dataset_nan_fill:
             fill_arr = reg.predict(pred_X)
 
         else: # use existing data to fill
-            if case == 'end':
-                train_X = partial_df.iloc[:x][other_cols].values
-                train_y = partial_df.iloc[:x][[col]].values
-                pred_X = partial_df.iloc[x:][other_cols].values
-            elif case == 'start':
-                train_X = partial_df.iloc[y+1:][other_cols].values
-                train_y = partial_df.iloc[y+1:][[col]].values
-                pred_X = partial_df.iloc[:y+1][other_cols].values
+            train = partial_df[other_cols + [col]].dropna()
+            train_X = train[other_cols].values
+            train_y = train[[col]].values
+
+            pred_idx = partial_df[col].isnull()
+            pred_idx = pred_idx[pred_idx == True].index
+            pred_idx = partial_df.index.get_indexer(pred_idx)
+            pred_X = partial_df.iloc[pred_idx][other_cols].values
+
             pred_X = np.append(np.ones((pred_X.shape[0], 1)), pred_X, axis=1)
             train_X = np.append(np.ones((train_X.shape[0], 1)), train_X, axis=1)
+
             reg = LinearRegression().fit(train_X, train_y)
             fill_arr = reg.predict(pred_X)
             #arr[x:y+1] = fill_arr.flatten()
@@ -661,6 +676,8 @@ def get_clean_data(data_version, recache, comp_col='ric', time_cols=['data_year'
 
         df, data_file, data_props, fillnan_formulas = _download_data_from_sql(data_version=data_version, recache=recache)
 
+        print('Data length:', len(df))
+
         df.replace([np.inf, -np.inf], np.nan, inplace=True)
         df = df[df['sales'] > 0]
         df = df[df['eps'].notna()]
@@ -679,6 +696,8 @@ def get_clean_data(data_version, recache, comp_col='ric', time_cols=['data_year'
     else:
         print('Cleaned data already cached.')
         df = pd.read_csv(cache_file)
+
+
 
     return df
 

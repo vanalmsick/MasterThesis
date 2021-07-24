@@ -39,11 +39,14 @@ class data_prep:
 
 
     def _get_raw_data(self):
-        df, self.raw_file_path = _download_data_from_sql(data_version=self.dataset, recache=self.recache)
+        #df, self.raw_file_path = _download_data_from_sql(data_version=self.dataset, recache=self.recache)
+        from c_data_prep.b_feature_engineering import feature_engerneeing
+        df = feature_engerneeing()
 
         dataset_pops = {'final_data':   {'iter_col': ['period_year', 'period_qrt'], 'company_col': 'gvkey', 'y_col': ['tr_f_ebit'], 'category_cols': ['gsector', 'ggroup'], 'date_cols': []},
                         'final_data_2': {'iter_col': ['period_year', 'period_qrt'], 'company_col': 'gvkey', 'y_col': ['tr_f_ebit'], 'category_cols': ['gsector', 'ggroup'], 'date_cols': []},
-                        'handpicked_dataset': {'iter_col': ['data_year', 'data_qrt'], 'company_col': 'ric', 'y_col': ['roe'], 'category_cols': ['headquarterscountry', 'industry', 'sector', 'marketcapcurrency', 'analystrecom'], 'date_cols': []}}
+                        'handpicked_dataset': {'iter_col': ['data_year', 'data_qrt'], 'company_col': 'ric', 'y_col': ['roe'], 'category_cols': ['headquarterscountry', 'industry', 'sector', 'marketcapcurrency', 'analystrecom'], 'date_cols': []},
+                        'handpicked_dataset2': {'iter_col': ['data_year', 'data_qrt'], 'company_col': 'ric', 'y_col': ['y_roe'], 'category_cols': [], 'date_cols': []}}
 
         self.dataset_iter_col = dataset_pops[self.dataset]['iter_col']
         self.dataset_company_col = dataset_pops[self.dataset]['company_col']
@@ -76,12 +79,15 @@ class data_prep:
 
     def _transform_dummy_vars(self):
         cat_cols = self.raw_data.select_dtypes(include=['object', 'category']).columns.tolist()
+        # ToDo: remove dummy variable transformation as done before
+        cat_cols = [i for i in cat_cols if i != self.dataset_company_col]
+        self.cols.remove('industry')
         df = self.raw_data.copy()
         dummy_dict = {}
-        for col in cat_cols:
-            tmp = pd.get_dummies(df[col], dummy_na=True, drop_first=True, prefix=str(col))
-            dummy_dict[col] = tmp.columns.tolist()
-            df = pd.concat([df, tmp], axis=1)
+        #for col in cat_cols:
+        #    tmp = pd.get_dummies(df[col], dummy_na=True, drop_first=True, prefix=str(col))
+        #    dummy_dict[col] = tmp.columns.tolist()
+        #    df = pd.concat([df, tmp], axis=1)
         self.data = df.drop(columns=cat_cols)
         # ToDo: Implement real NaN handling
         self.data = self.data.fillna(self.data.mean().fillna(0))
@@ -405,7 +411,7 @@ class data_prep:
         for df, norm_key, lower_idx, upper_idx, comp, norm_method in args:
             t += 1
             #print(type(norm_key), norm_key, type(lower_idx), lower_idx, type(upper_idx), upper_idx, type(comp), comp, type(norm_method), norm_method)
-            tmp_df = df[(df.index >= int(lower_idx)) & (df.index <= int(upper_idx)) & (df[self.dataset_company_col] == int(comp))]
+            tmp_df = df[(df.index >= int(lower_idx)) & (df.index <= int(upper_idx)) & (df[self.dataset_company_col] == comp)]
 
 
             if len(tmp_df) > 0:
@@ -962,7 +968,7 @@ if __name__ == '__main__':
     # ToDo: add block normalization
 
 
-    data = data_prep(dataset='handpicked_dataset', recache=False, keep_raw_cols='default', drop_cols='default')
+    data = data_prep(dataset='handpicked_dataset2', recache=False, keep_raw_cols='default', drop_cols='default')
 
     data.window(input_width=5*4, pred_width=4, shift=1)
 

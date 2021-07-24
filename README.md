@@ -1,18 +1,18 @@
 # MasterThesis
 Predicting company earnings (Net income / ROE / dividends per share) with AI from company fundamentals (B/S, I/S, CF/S, ShrE/S).
 
-##  Getting the data (a)
+## 1. Getting the data *(folder: a)*
 Please see the [README_get_data.md](app/a_get_data/README_get_data.md)
 
-## Data cleaning and missing data handling (b)
+## 2. Data cleaning and missing data handling *(folder: b)*
 Intelligent NaN filling.
   
-## Data prep / feature engerneering (c)
+## 3. Data prep / feature engerneering *(folder: c)*
 - Feature engerneeing
 - Data normalization
 - Data sperating into training sets
   
-## Prediction (d)
+## 4. Prediction *(folder: d)*
 prediction.py (in app/d_prediction) executes all models:
 1. baseline models
     - Baseline_last_value: prediction = last quarter value

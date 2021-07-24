@@ -8,7 +8,7 @@ import tensorflow as tf
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 import z_helpers as my
 ##################################
-from a_data_cleaning import get_clean_data
+from c_data_prep.a_data_cleaning import get_clean_data
 
 
 def get_pct_change(df, time_cols=['period_year', 'period_qrt'], company_cols=['gvkey'], reset_index=True):
@@ -18,7 +18,7 @@ def get_pct_change(df, time_cols=['period_year', 'period_qrt'], company_cols=['g
     df_cp = df_cp.select_dtypes(np.number).groupby(level=company_cols).pct_change()
     if reset_index:
         df_cp = df_cp.reset_index()
-    return df_cp
+    return df_cp.fillna(0)
 
 def get_shifted_df(df, shift=1, time_cols=['period_year', 'period_qrt'], company_cols=['gvkey'], reset_index=True):
     df_cp = df.copy()
@@ -40,11 +40,11 @@ def industry_average(df, time_cols=['period_year', 'period_qrt'], industry_cols=
     return df_cp
 
 
-def compare_against_industry(df_comps, df_industry, time_cols, industry_col, as_int=False):
+def compare_against_industry(df_comps, df_industry, time_cols, company_col, industry_col, as_int=False):
     comb = df_comps.merge(df_industry, on=time_cols + [industry_col], how="left", suffixes=("_comp", "_ind"))
     cols = df_comps.columns.tolist()
     cols = [i for i in cols if i in df_industry.columns.tolist() and i not in time_cols and i != industry_col]
-    new_df = comb[time_cols + [industry_col]].copy()
+    new_df = comb[time_cols + [company_col]].copy()
     for col in cols:
         if pd.api.types.is_numeric_dtype(comb[col + '_comp']):
             if as_int:
@@ -130,34 +130,98 @@ def xue_zhang_signs(df_abs, df_pct, iter_col, company_col, industry_col):
     new_df['10_Quick Ratio'] = df_pct['quickratio']
     new_df['11_Working Capital'] = df_pct['wc']
 
-    df_ind_avg = industry_average(new_df, time_cols=time_cols, industry_cols=[industry_col], reset_index=True)
+    print('xue_zhang', new_df.notna().mean() * 100)
 
-    dummy_comp_vs_ind = compare_against_industry(df_comps=new_df, df_industry=df_ind_avg, time_cols=time_cols, industry_col=industry_col, as_int=True)
+    df_ind_avg = industry_average(new_df, time_cols=iter_col, industry_cols=[industry_col], reset_index=True)
+
+    dummy_comp_vs_ind = compare_against_industry(df_comps=new_df, df_industry=df_ind_avg, time_cols=iter_col, company_col=company_col, industry_col=industry_col, as_int=True)
 
     return dummy_comp_vs_ind
 
 
+def dummy_signs(df, dummy_cols, iter_col, company_col):
+    new_df = pd.get_dummies(df, prefix=dummy_cols, columns=dummy_cols, dummy_na=True, drop_first=True)
+    drop_cols = [i for i in df.columns.tolist() if i not in [company_col] + iter_col]
+    new_df.drop(columns=drop_cols, inplace=True, errors='ignore')
 
-if __name__ == '__main__':
+    return new_df
+
+
+
+def y_columns(df_abs, df_pct, iter_col, company_col, industry_col):
+    new_df = df_abs[[company_col] + [industry_col] + iter_col].copy()
+    new_df['y_eps'] = df_abs['eps']
+    new_df['y_eps pct'] = df_pct['eps']
+    new_df['y_dividendyield'] = df_abs['dividendyield']
+    new_df['y_dividendyield pct'] = df_pct['dividendyield']
+    new_df['y_dividendperstock'] = df_abs['dividendperstock']
+    new_df['y_dividendperstock pct'] = df_pct['dividendperstock']
+    new_df['y_roe'] = df_abs['roe']
+    new_df['y_roe pct'] = df_pct['roe']
+    new_df['y_roa'] = df_abs['roa']
+    new_df['y_roa pct'] = df_pct['roa']
+    new_df['y_EBIT'] = df_abs['ebit']
+    new_df['y_EBIT pct'] = df_pct['ebit']
+    new_df['y_Net income'] = df_abs['netincome']
+    new_df['y_Net income pct'] = df_pct['netincome']
+
+    return new_df
+
+
+
+def merge_df(index_cols, merge_dfs):
+    new_df = merge_dfs[0].copy()
+    for i in range(1, len(merge_dfs)):
+        new_df = pd.merge(new_df, merge_dfs[i], how='inner', on=index_cols)
+    return new_df
+
+
+
+
+
+def feature_engerneeing():
     data_version = 'handpicked_dataset'
     recache = False
     comp_col = 'ric'
     time_cols = ['data_year', 'data_qrt']
     industry_col = 'industry'
 
-    df = get_clean_data(data_version=data_version, recache=recache, comp_col=comp_col, time_cols=time_cols, industry_col=industry_col)
+    df = get_clean_data(data_version=data_version, recache=recache, comp_col=comp_col, time_cols=time_cols,
+                        industry_col=industry_col)
 
     df_ind_avg = industry_average(df, time_cols=time_cols, industry_cols=[industry_col], reset_index=True)
-    df = df.merge(df_ind_avg[time_cols + [industry_col] + ['capitalexpenditures', 'randd']], how='left', on=time_cols + [industry_col], validate='many_to_one', suffixes=['', '_avg'])
-    df_shift = get_shifted_df(df, shift=1, time_cols=time_cols, company_cols=[comp_col], reset_index=True).fillna(method='bfill')
-    df = df.merge(df_shift[time_cols + [comp_col] + ['sales', 'employeenum', 'dividendperstock']], how='left', on=time_cols + [comp_col], validate='many_to_one', suffixes=['', '_sft_1'])
+    df = df.merge(df_ind_avg[time_cols + [industry_col] + ['capitalexpenditures', 'randd']], how='left',
+                  on=time_cols + [industry_col], validate='many_to_one', suffixes=['', '_avg'])
+    df_shift = get_shifted_df(df, shift=1, time_cols=time_cols, company_cols=[comp_col], reset_index=True).fillna(
+        method='bfill')
+    df = df.merge(df_shift[time_cols + [comp_col] + ['sales', 'employeenum', 'dividendperstock']], how='left',
+                  on=time_cols + [comp_col], validate='many_to_one', suffixes=['', '_sft_1'])
 
     df_pct = get_pct_change(df, time_cols=time_cols, company_cols=[comp_col], reset_index=True)
-    df_pct_shift4 = get_shifted_df(df_pct, shift=4, time_cols=time_cols, company_cols=[comp_col], reset_index=True).fillna(method='bfill')
-    df_pct = df.merge(df_pct_shift4[time_cols + [comp_col] + ['capextoassets']], how='left', on=time_cols + [comp_col], validate='many_to_one', suffixes=['', '_sft_4'])
+    df_pct_shift4 = get_shifted_df(df_pct, shift=4, time_cols=time_cols, company_cols=[comp_col],
+                                   reset_index=True).fillna(method='bfill')
+    df_pct = df_pct.merge(df_pct_shift4[time_cols + [comp_col] + ['capextoassets']], how='left',
+                          on=time_cols + [comp_col], validate='many_to_one', suffixes=['', '_sft_4'])
 
     df_lev_thi = lev_thiagaranjan_signs(df_abs=df, df_pct=df_pct, iter_col=time_cols, company_col=comp_col)
     df_ou_penn = ou_pennmann_signs(df_abs=df, df_pct=df_pct, iter_col=time_cols, company_col=comp_col)
-    df_xue_zha = xue_zhang_signs(df_abs=df, df_pct=df_pct, iter_col=time_cols, company_col=comp_col, industry_col=industry_col)
+    df_xue_zha = xue_zhang_signs(df_abs=df, df_pct=df_pct, iter_col=time_cols, company_col=comp_col,
+                                 industry_col=industry_col)
 
-    print(df_lev_thi, df_ou_penn, df_xue_zha)
+    df_dummy = dummy_signs(df=df,
+                           dummy_cols=[industry_col, 'sector', 'exchangename', 'headquarterscountry', 'analystrecom'],
+                           iter_col=time_cols, company_col=comp_col)
+
+    df_y = y_columns(df_abs=df, df_pct=df_pct, iter_col=time_cols, company_col=comp_col, industry_col=industry_col)
+
+    df_all = merge_df(index_cols=time_cols + [comp_col], merge_dfs=[df_lev_thi, df_ou_penn, df_xue_zha, df_dummy, df_y])
+
+    df_all = df_all.dropna()
+
+    return df_all
+
+
+
+if __name__ == '__main__':
+
+    df_all = feature_engerneeing()

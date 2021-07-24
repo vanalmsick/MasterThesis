@@ -4,7 +4,7 @@ import mlflow.keras
 import datetime
 import pandas as pd
 
-def compile_and_fit(model, train, val, model_name='UNKNOWN', patience=50, MAX_EPOCHS=50):
+def compile_and_fit(model, train, val, model_name='UNKNOWN', patience=25, MAX_EPOCHS=50):
     tracking_address = my_helpers.get_project_directories(key='tensorboard_logs')
     TBLOGDIR = tracking_address + "/" + model_name
 
@@ -33,7 +33,7 @@ def compile_and_fit(model, train, val, model_name='UNKNOWN', patience=50, MAX_EP
 
     summary_table = pd.DataFrame(columns=["Layer (Type)", "Input Shape", "Output Shape", "Param #", "Dropout", "Bias initializer", "Bias regularizer"])
     for layer in model.layers:
-        summary_table = summary_table.append({"Layer (Type)": layer.name + '(' + layer.__class__.__name__ + ')', "Input Shape": layer.input_shape, "Output Shape": layer.output_shape, "Param #": layer.count_params(), "Dropout": layer.dropout if hasattr(layer, 'dropout') else 'nan', "Bias initializer": layer.bias_initializer._tf_api_names if hasattr(layer, 'bias_initializer') else 'nan', "Bias regularizer": layer.bias_regularizer if hasattr(layer, 'bias_regularizer') else 'nan'}, ignore_index=True)
+        summary_table = summary_table.append({"Layer (Type)": layer.name + '(' + layer.__class__.__name__ + ')', "Input Shape": layer.input_shape, "Output Shape": layer.output_shape, "Param #": layer.count_params(), "Dropout": layer.dropout if hasattr(layer, 'dropout') else 'nan', "Bias initializer": layer.bias_initializer._tf_api_names if hasattr(layer, 'bias_initializer') and hasattr(layer.bias_initializer, '_tf_api_names') else 'nan', "Bias regularizer": layer.bias_regularizer if hasattr(layer, 'bias_regularizer') else 'nan'}, ignore_index=True)
 
     mlflow_additional_params = {'layer_df': summary_table,
                                 'model_name': model_name,
@@ -64,17 +64,17 @@ def evaluate_model(model, tf_data, mlflow_additional_params=None):
 
 def main_run_LSTM_models(train_ds, val_ds, test_ds, val_performance_dict, test_performance_dict, data_props, examples=None):
 
-    input_layer_shape = 267
-    target_size = 4
-    timesteps = 20
+    input_layer_shape = train_ds.element_spec[0].shape[-1]
+    target_size = train_ds.element_spec[1].shape[-1]
+    timesteps = train_ds.element_spec[0].shape[1]
 
     linear = tf.keras.Sequential()
-    #linear.add(tf.keras.layers.BatchNormalization())
+    linear.add(tf.keras.layers.BatchNormalization())
     linear.add(tf.keras.layers.LSTM(input_layer_shape, return_sequences=True, input_shape=(timesteps, input_layer_shape)))
 
 
-    #linear.add(tf.keras.layers.BatchNormalization())
-    #linear.add(tf.keras.layers.LSTM(32, return_sequences=True))
+    linear.add(tf.keras.layers.BatchNormalization())
+    linear.add(tf.keras.layers.LSTM(32, return_sequences=True))
     #linear.add(tf.keras.layers.BatchNormalization())
     #linear.add(tf.keras.layers.LSTM(32))
 
