@@ -1,5 +1,18 @@
-pandas
-numpy
+# python==3.8
+six==1.15.0
+numpy==1.19.5
+pandas==1.2.3
+
+keras==2.4.3
+tensorflow==2.4.1  # version needed because need keras max 2.4.3 for mlflow.keras.autolog() to work
+mlflow==1.15.0
+
+silx==0.15.2
+
 eikon
 progressbar2
 psycopg2
+matplotlib
+tables
+tqdm
+pmdarima
