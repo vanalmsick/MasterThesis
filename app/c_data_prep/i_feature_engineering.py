@@ -177,12 +177,9 @@ def merge_df(index_cols, merge_dfs):
 
 
 
-def feature_engerneeing(dataset, comp_col, time_cols, industry_col, recache = False):
+def feature_engerneeing(dataset, comp_col, time_cols, industry_col, recache=False):
 
-    if type(dataset) == str:
-        df = get_clean_data(data_version=dataset, recache=recache, comp_col=comp_col, time_cols=time_cols, industry_col=industry_col)
-    else:
-        df = dataset
+    df = dataset
 
     df_ind_avg = industry_average(df, time_cols=time_cols, industry_cols=[industry_col], reset_index=True)
     df = df.merge(df_ind_avg[time_cols + [industry_col] + ['capitalexpenditures', 'randd']], how='left', on=time_cols + [industry_col], validate='many_to_one', suffixes=['', '_avg'])

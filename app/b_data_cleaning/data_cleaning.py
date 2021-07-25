@@ -653,44 +653,86 @@ class dataset_nan_fill:
 
 
 
+def _data_quality_filter(df, drop_threshold_row_pct=0.0, drop_threshold_row_quantile=0.0, drop_threshold_col_pct=0.0, required_filled_cols=[], append_data_quality_col=True):
+    len_df = len(df)
+
+    col_count = df.count(axis=1)
+    max_col = max(col_count)
+    col_count /= max_col
+
+    row_count = df.count(axis=0)
+    max_row = max(row_count)
+    row_count /= max_row
+    drop_cols = str(df.columns[row_count < drop_threshold_col_pct].tolist())[1:-1]
+    dropped_rows_because_required_cols = len(df) - df[required_filled_cols].notna().all(axis=1).value_counts()[True]
+
+
+    df = df.loc[df[required_filled_cols].notna().all(axis=1)]  # drop row based on required filled columns
+    df = df.loc[col_count >= drop_threshold_row_pct]  # Row dropping by percent
+    df = df.loc[col_count >= col_count.quantile(drop_threshold_row_quantile)]  # Row dropping by quantile
+    df = df.loc[:, df.columns[row_count >= drop_threshold_col_pct]]  # column dropping by percent
+
+    if append_data_quality_col:
+        df['data_quality'] = col_count
+
+    info_text = f'Data quality has dropped {dropped_rows_because_required_cols} rows because of required filled cols ({str(required_filled_cols)[1:-1]}) before NaN-filling resulting dataset with {len_df - dropped_rows_because_required_cols} ({int((len_df - dropped_rows_because_required_cols) / len_df * 100)}% of initial dataset size).\n'
+    info_text += f'Data quality has dropped {len_df - len(df) - dropped_rows_because_required_cols} rows by dropping every row filled less than {int(max(drop_threshold_row_pct, col_count.quantile(drop_threshold_row_quantile))*100)}% resulting in {len(df)} rows in the end ({int(len(df)/len_df*100)}% of initial dataset size).\n'
+    info_text += f'Data quality has dropped {len(row_count) - (row_count >= drop_threshold_col_pct).value_counts()[True]} of {len(row_count)} columns by using threshold of {int(drop_threshold_col_pct * 100)}%. (columns dropped: {drop_cols})\n'
+
+
+    return df, info_text
 
 
 
 
 
 
-def get_clean_data(data_version, recache, comp_col='ric', time_cols=['data_year', 'data_qrt'], industry_col='industry'):
+
+
+
+def get_clean_data(data_version, recache_raw_data=False, redo_data_cleaning=False, comp_col='ric', time_cols=['data_year', 'data_qrt'], industry_col='industry', required_filled_cols_before_filling=[], required_filled_cols_after_filling=[], drop_threshold_row_pct=0.25, drop_threshold_row_quantile=0.2, drop_threshold_col_pct=0, append_data_quality_col=False):
 
     cache_folder = os.path.join(my.get_project_directories(key='cache_dir'), 'cleaned_data')
     my_hash = my.data_hash(data_version, comp_col, time_cols, industry_col)
     cache_file = os.path.join(cache_folder, my_hash + '.csv')
 
-    if recache or not os.path.exists(cache_file):
+    if redo_data_cleaning or not os.path.exists(cache_file):
         print('Cleaned data not cached...')
 
-        df, data_file, data_props, fillnan_formulas = _download_data_from_sql(data_version=data_version, recache=recache)
+        df, data_file, data_props, fillnan_formulas = _download_data_from_sql(data_version=data_version, recache=recache_raw_data)
 
-        print('Data length:', len(df))
+        info_text = f'Initial dataset length {df.shape[0]} rows with {df.shape[1]} columns.\n'
+        print(info_text)
+        initial_len_df = len(df)
 
         df.replace([np.inf, -np.inf], np.nan, inplace=True)
-        df = df[df['sales'] > 0]
-        df = df[df['eps'].notna()]
-        df = df[df['ebit'].notna()]
+
+
+        # Count filled columns per row as data-quality metric
+        df, tmp_info_text = _data_quality_filter(df, drop_threshold_row_pct=drop_threshold_row_pct, drop_threshold_row_quantile=drop_threshold_row_quantile, drop_threshold_col_pct=drop_threshold_col_pct, required_filled_cols=required_filled_cols_before_filling, append_data_quality_col=append_data_quality_col)
+        print(tmp_info_text)
+
+        info_text += tmp_info_text
+
         dataset_nan_fill(df, company_col=comp_col, time_cols=time_cols, industry_col=industry_col, data_props = data_props, fillnan_formulas=fillnan_formulas, formula_iterations=3)
 
-        #all_count = df.groupby(level=[1, 2]).count()
-        #col_count = all_count.median(axis=0)
-        #additional_drop_cols = col_count[col_count < 20].index.tolist()
-        #print('These cols have less than 20 entries condsider dropping please')
-        #col_count = col_count / col_count['companyname']
-        #col_count.to_csv('result_col_count.csv')
+        len_df = len(df)
+        df = df.loc[df[required_filled_cols_after_filling].notna().all(axis=1)]  # drop row based on required filled columns
 
+        tmp_info_text = f'Data quality has dropped {len_df - len(df)} rows because of required filled cols ({str(required_filled_cols_after_filling)[1:-1]}) after NaN-filling resulting dataset with {len(df)} ({int(len(df) / initial_len_df * 100)}% of initial dataset size).'
+        print(tmp_info_text)
+        info_text += tmp_info_text
+
+        with open(cache_file[:-3] + 'info', "w") as text_file:
+            text_file.write(info_text)
         df.to_csv(cache_file)
 
     else:
         print('Cleaned data already cached.')
+        with open(cache_file[:-3] + 'info', "r") as text_file:
+            info_text = text_file.read()
         df = pd.read_csv(cache_file)
-
+        print(info_text)
 
     return df
 
@@ -707,11 +749,15 @@ if  __name__ == '__main__':
     dataset_props = get_dataset_registry()[dataset_name]
 
 
-    recache_data = False
+    recache_raw_data = False
+    redo_cleaning = False
     comp_col = dataset_props['company_col']
     time_cols = dataset_props['iter_cols']
     industry_col = dataset_props['industry_col']
 
-    df = get_clean_data(data_version=dataset_name, recache=recache_data, comp_col=comp_col, time_cols=time_cols, industry_col=industry_col)
+    drop_row_if_col_not_filled_before_filling = ['sales', 'eps']
+    drop_row_if_col_not_filled_after_filling = ['ebit']
+
+    df = get_clean_data(data_version=dataset_name, recache_raw_data=recache_raw_data, redo_data_cleaning=redo_cleaning, comp_col=comp_col, time_cols=time_cols, industry_col=industry_col, required_filled_cols_before_filling=drop_row_if_col_not_filled_before_filling, required_filled_cols_after_filling=drop_row_if_col_not_filled_after_filling)
 
     print(df)
