@@ -4,11 +4,9 @@ import pandas as pd
 import numpy as np
 import tensorflow as tf
 
-### Add other shared functions ###
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-import z_helpers as my
-##################################
-from c_data_prep.a_data_cleaning import get_clean_data
+# Working directory must be the higher .../app folder
+from app.z_helpers import helpers as my
+from app.b_data_cleaning.data_cleaning import get_clean_data
 
 
 def get_pct_change(df, time_cols=['period_year', 'period_qrt'], company_cols=['gvkey'], reset_index=True):
@@ -179,38 +177,27 @@ def merge_df(index_cols, merge_dfs):
 
 
 
-def feature_engerneeing():
-    data_version = 'handpicked_dataset'
-    recache = False
-    comp_col = 'ric'
-    time_cols = ['data_year', 'data_qrt']
-    industry_col = 'industry'
+def feature_engerneeing(dataset, comp_col, time_cols, industry_col, recache = False):
 
-    df = get_clean_data(data_version=data_version, recache=recache, comp_col=comp_col, time_cols=time_cols,
-                        industry_col=industry_col)
+    if type(dataset) == str:
+        df = get_clean_data(data_version=dataset, recache=recache, comp_col=comp_col, time_cols=time_cols, industry_col=industry_col)
+    else:
+        df = dataset
 
     df_ind_avg = industry_average(df, time_cols=time_cols, industry_cols=[industry_col], reset_index=True)
-    df = df.merge(df_ind_avg[time_cols + [industry_col] + ['capitalexpenditures', 'randd']], how='left',
-                  on=time_cols + [industry_col], validate='many_to_one', suffixes=['', '_avg'])
-    df_shift = get_shifted_df(df, shift=1, time_cols=time_cols, company_cols=[comp_col], reset_index=True).fillna(
-        method='bfill')
-    df = df.merge(df_shift[time_cols + [comp_col] + ['sales', 'employeenum', 'dividendperstock']], how='left',
-                  on=time_cols + [comp_col], validate='many_to_one', suffixes=['', '_sft_1'])
+    df = df.merge(df_ind_avg[time_cols + [industry_col] + ['capitalexpenditures', 'randd']], how='left', on=time_cols + [industry_col], validate='many_to_one', suffixes=['', '_avg'])
+    df_shift = get_shifted_df(df, shift=1, time_cols=time_cols, company_cols=[comp_col], reset_index=True).fillna( method='bfill')
+    df = df.merge(df_shift[time_cols + [comp_col] + ['sales', 'employeenum', 'dividendperstock']], how='left', on=time_cols + [comp_col], validate='many_to_one', suffixes=['', '_sft_1'])
 
     df_pct = get_pct_change(df, time_cols=time_cols, company_cols=[comp_col], reset_index=True)
-    df_pct_shift4 = get_shifted_df(df_pct, shift=4, time_cols=time_cols, company_cols=[comp_col],
-                                   reset_index=True).fillna(method='bfill')
-    df_pct = df_pct.merge(df_pct_shift4[time_cols + [comp_col] + ['capextoassets']], how='left',
-                          on=time_cols + [comp_col], validate='many_to_one', suffixes=['', '_sft_4'])
+    df_pct_shift4 = get_shifted_df(df_pct, shift=4, time_cols=time_cols, company_cols=[comp_col], reset_index=True).fillna(method='bfill')
+    df_pct = df_pct.merge(df_pct_shift4[time_cols + [comp_col] + ['capextoassets']], how='left', on=time_cols + [comp_col], validate='many_to_one', suffixes=['', '_sft_4'])
 
     df_lev_thi = lev_thiagaranjan_signs(df_abs=df, df_pct=df_pct, iter_col=time_cols, company_col=comp_col)
     df_ou_penn = ou_pennmann_signs(df_abs=df, df_pct=df_pct, iter_col=time_cols, company_col=comp_col)
-    df_xue_zha = xue_zhang_signs(df_abs=df, df_pct=df_pct, iter_col=time_cols, company_col=comp_col,
-                                 industry_col=industry_col)
+    df_xue_zha = xue_zhang_signs(df_abs=df, df_pct=df_pct, iter_col=time_cols, company_col=comp_col, industry_col=industry_col)
 
-    df_dummy = dummy_signs(df=df,
-                           dummy_cols=[industry_col, 'sector', 'exchangename', 'headquarterscountry', 'analystrecom'],
-                           iter_col=time_cols, company_col=comp_col)
+    df_dummy = dummy_signs(df=df, dummy_cols=[industry_col, 'sector', 'exchangename', 'headquarterscountry', 'analystrecom'], iter_col=time_cols, company_col=comp_col)
 
     df_y = y_columns(df_abs=df, df_pct=df_pct, iter_col=time_cols, company_col=comp_col, industry_col=industry_col)
 
@@ -223,5 +210,18 @@ def feature_engerneeing():
 
 
 if __name__ == '__main__':
+    # Working directory must be the higher .../app folder
+    from app.z_helpers import helpers as my
+    my.convenience_settings()
 
-    df_all = feature_engerneeing()
+    dataset_name = 'handpicked_dataset'
+
+    from app.b_data_cleaning import get_dataset_registry
+    dataset_props = get_dataset_registry()[dataset_name]
+
+    recache_data = False
+    comp_col = dataset_props['company_col']
+    time_cols = dataset_props['iter_cols']
+    industry_col = dataset_props['industry_col']
+
+    df_all = feature_engerneeing(dataset=dataset_name, comp_col=comp_col, time_cols=time_cols, industry_col=industry_col, recache = False)

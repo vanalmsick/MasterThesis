@@ -5,18 +5,15 @@ import numpy as np
 import pmdarima as pm
 from sklearn.linear_model import LinearRegression
 
-### Add other shared functions ###
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-import z_helpers as my
-##################################
+# Working directory must be the higher .../app folder
+from app.z_helpers import helpers as my
 
 
 
 def _download_data_from_sql(data_version='final_data', recache=False):
-    data_dict = {'final_data': 'final_data',
-                 'final_data_2': 'final_data_2',
-                 'handpicked_dataset': 'entire_small_dataset2_unique'}
-    query = "SELECT * FROM {}".format(data_dict[data_version])
+    from app.b_data_cleaning import get_dataset_registry
+    sql_table_name = get_dataset_registry()[dataset_name]['sql_table']
+    query = "SELECT * FROM {}".format(sql_table_name)
 
     param_dic = my.get_credentials(credential='aws')
 
@@ -662,9 +659,6 @@ class dataset_nan_fill:
 
 
 
-
-
-
 def get_clean_data(data_version, recache, comp_col='ric', time_cols=['data_year', 'data_qrt'], industry_col='industry'):
 
     cache_folder = os.path.join(my.get_project_directories(key='cache_dir'), 'cleaned_data')
@@ -698,19 +692,26 @@ def get_clean_data(data_version, recache, comp_col='ric', time_cols=['data_year'
         df = pd.read_csv(cache_file)
 
 
-
     return df
 
 
 
 if  __name__ == '__main__':
-    dataset_name = 'handpicked_dataset'
-    recache_data = False
-    comp_col = 'ric'
-    time_cols = ['data_year', 'data_qrt']
-    industry_col = 'industry'
-
+    # Working directory must be the higher .../app folder
+    from app.z_helpers import helpers as my
     my.convenience_settings()
 
+    dataset_name = 'handpicked_dataset'
+
+    from app.b_data_cleaning import get_dataset_registry
+    dataset_props = get_dataset_registry()[dataset_name]
+
+
+    recache_data = False
+    comp_col = dataset_props['company_col']
+    time_cols = dataset_props['iter_cols']
+    industry_col = dataset_props['industry_col']
+
     df = get_clean_data(data_version=dataset_name, recache=recache_data, comp_col=comp_col, time_cols=time_cols, industry_col=industry_col)
+
     print(df)

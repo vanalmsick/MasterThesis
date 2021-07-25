@@ -4,28 +4,47 @@ import pandas as pd
 import numpy as np
 import tensorflow as tf
 
-### Add other shared functions ###
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-import z_helpers as my
-##################################
-
-
-
+# Working directory must be the higher .../app folder
+from app.z_helpers import helpers as my
 
 
 
 
 class data_prep:
-    def __init__(self, dataset='final_data_2', recache=False, keep_raw_cols='default', drop_cols='default'):
-        self.dataset = dataset
+    def __init__(self, dataset, iter_cols=None, comp_col=None, y_cols=None, recache=False, category_cols=[], date_cols=[], keep_raw_cols=[], drop_cols=[]):
         self.recache = recache
 
-        if keep_raw_cols == 'default':
-            keep_raw_cols = []
-        self.keep_raw_cols = keep_raw_cols
 
-        if drop_cols == 'default':
-            drop_cols = ['ric', 'curcdq', 'rp', 'updq', 'iid', 'exchg', 'costat', 'fic', 'srcq', 'curncdq', 'acctsdq', 'acctstdq', 'ggroup']
+        if type(dataset) == str:
+
+            from app.b_data_cleaning import get_dataset_registry
+            dataset_props = get_dataset_registry()[dataset]
+
+            comp_col = dataset_props['company_col']
+            iter_cols = dataset_props['iter_cols']
+            industry_col = dataset_props['industry_col']
+            category_cols = dataset_props['category_cols'] if 'category_cols' in dataset_props and category_cols == [] else category_cols
+            date_cols = dataset_props['date_cols'] if 'date_cols' in dataset_props and date_cols == [] else date_cols
+            y_cols = dataset_props['y_col'] if 'y_col' in dataset_props and y_cols is False else y_cols
+
+            from app.c_data_prep.i_feature_engineering import feature_engerneeing
+            dataset = feature_engerneeing(dataset=dataset_name, comp_col=comp_col, time_cols=iter_cols, industry_col=industry_col, recache=recache)
+
+        if iter_cols is None or comp_col is None or y_cols is None:
+            raise Exception(f'One of them is None which is not allowed: iter_cols = {iter_cols}, comp_col = {comp_col}, y_cols = {y_cols}')
+
+        from pandas.util import hash_pandas_object
+        dataset_hash = hash_pandas_object(dataset).sum()
+        self.dataset = dataset_hash
+
+        self.dataset_iter_col = iter_cols
+        self.dataset_company_col = comp_col
+        self.dataset_y_col = y_cols
+        self.dataset_category_cols = category_cols
+        self.dataset_date_cols = date_cols
+
+
+        self.keep_raw_cols = keep_raw_cols
 
         self.cols_drop = drop_cols
         self.cols_just_these = False
@@ -35,45 +54,31 @@ class data_prep:
 
         self.lagged_col_dict = {}
 
-        self.computed = False
-
-
-    def _get_raw_data(self):
-        #df, self.raw_file_path = _download_data_from_sql(data_version=self.dataset, recache=self.recache)
-        from c_data_prep.b_feature_engineering import feature_engerneeing
-        df = feature_engerneeing()
-
-        dataset_pops = {'final_data':   {'iter_col': ['period_year', 'period_qrt'], 'company_col': 'gvkey', 'y_col': ['tr_f_ebit'], 'category_cols': ['gsector', 'ggroup'], 'date_cols': []},
-                        'final_data_2': {'iter_col': ['period_year', 'period_qrt'], 'company_col': 'gvkey', 'y_col': ['tr_f_ebit'], 'category_cols': ['gsector', 'ggroup'], 'date_cols': []},
-                        'handpicked_dataset': {'iter_col': ['data_year', 'data_qrt'], 'company_col': 'ric', 'y_col': ['roe'], 'category_cols': ['headquarterscountry', 'industry', 'sector', 'marketcapcurrency', 'analystrecom'], 'date_cols': []},
-                        'handpicked_dataset2': {'iter_col': ['data_year', 'data_qrt'], 'company_col': 'ric', 'y_col': ['y_roe'], 'category_cols': [], 'date_cols': []}}
-
-        self.dataset_iter_col = dataset_pops[self.dataset]['iter_col']
-        self.dataset_company_col = dataset_pops[self.dataset]['company_col']
-        self.dataset_y_col = dataset_pops[self.dataset]['y_col']
-        self.dataset_category_cols = dataset_pops[self.dataset]['category_cols']
-        self.dataset_date_cols = dataset_pops[self.dataset]['date_cols']
-
 
 
         # Format the data to the correct format
         for cat in self.dataset_category_cols:
-            df[cat] = df[cat].astype('category')
+            dataset[cat] = dataset[cat].astype('category')
         for dt_col in self.dataset_date_cols:
-            df[dt_col] = pd.to_datetime(df[dt_col])
+            dataset[dt_col] = pd.to_datetime(dataset[dt_col])
 
-        df[self.dataset_iter_col] = df[self.dataset_iter_col].astype(int)
+
 
         i_col = pd.DataFrame()
         for col in self.dataset_iter_col:
-            i_col[col] = df[col].astype(int).astype(str).str.zfill(2)
-        df['iter_col'] = i_col.agg(''.join, axis=1).astype(int)
-        self.iter_idx = np.array(df['iter_col'].unique()).tolist()
-        df.set_index(keys='iter_col', inplace=True)
-        df.sort_index(inplace=True)
+            i_col[col] = dataset[col].astype(int).astype(str).str.zfill(2)
+        dataset['iter_col'] = i_col.agg(''.join, axis=1).astype(int)
+        self.iter_idx = np.array(dataset['iter_col'].unique()).tolist()
+        dataset.set_index(keys='iter_col', inplace=True)
+        dataset.sort_index(inplace=True)
 
-        self.raw_data = df.copy()
-        self.mod_data = df.copy()
+
+
+
+        self.raw_data = dataset.copy()
+        self.mod_data = dataset.copy()
+        self.computed = False
+
 
 
 
@@ -326,7 +331,6 @@ class data_prep:
 
 
         # Transform data
-        self._get_raw_data()
         self.companies = self.raw_data[self.dataset_company_col].unique().tolist()
         self.comps = self.companies
         self.cols = self.raw_data.columns.tolist()
@@ -967,8 +971,26 @@ if __name__ == '__main__':
     # ToDo: rolling block step size of iteration
     # ToDo: add block normalization
 
+    # Working directory must be the higher .../app folder
+    from app.z_helpers import helpers as my
+    my.convenience_settings()
 
-    data = data_prep(dataset='handpicked_dataset2', recache=False, keep_raw_cols='default', drop_cols='default')
+    dataset_name = 'handpicked_dataset'
+
+    from app.b_data_cleaning import get_dataset_registry
+    dataset_props = get_dataset_registry()[dataset_name]
+
+    recache_data = False
+    comp_col = dataset_props['company_col']
+    time_cols = dataset_props['iter_cols']
+    industry_col = dataset_props['industry_col']
+    y_cols = dataset_props['y_col']
+
+    from app.c_data_prep.i_feature_engineering import feature_engerneeing
+    df = feature_engerneeing(dataset=dataset_name, comp_col=comp_col, time_cols=time_cols, industry_col=industry_col, recache=False)
+
+
+    data = data_prep(dataset=df, y_cols=y_cols, iter_cols=time_cols, comp_col=comp_col, keep_raw_cols=[], drop_cols=[])
 
     data.window(input_width=5*4, pred_width=4, shift=1)
 
