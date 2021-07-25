@@ -14,8 +14,25 @@ Please see the [README_get_data.md](app/a_get_data/README_get_data.md) for detai
 
 ## 2. Data cleaning and missing data handling *([folder: b](app/b_data_cleaning))*
 Intelligent NaN filling *([see code here](app/b_data_cleaning/data_cleaning.py))* with formulas and methods specified in last columns beginning with "fillnan_" in [this csv-file](app/a_get_data/reuters_eikon/key_reuters_fields.csv).  
+
+**Example for intelligent NaN-filling formulas and methods: *([see csv-file](app/a_get_data/reuters_eikon/key_reuters_fields.csv))***  
+
+| Category | Name | Reuters Code | Clear Name | fillnan_1 | fillnan_2 |
+| ------------- |:-------------:| -----:| -----:| -----:| -----:|
+| General | Data date | TR.TotalReturn.date | data_date | | |
+| Income Statement | Depreciation and amortization | TR.DepreciationDepletion+TR.Amortization | DeprArmo | formula:EBITDA-EBIT | formula:Depreciation+Amortization |
+| Income Statement | EBIT | TR.EBIT | EBIT | formula:EBITDA-DeprArmo |  |
+| Profitability | Tax Rate | TR.IncomeTaxRatePct | TaxRate | formula:Tax/PreTaxIncome*100 | method:linear(or=mean) |
+| Ratios | Asset Turnover | TR.F.AssetTurnover | AssetTurnover | formula:Sales/TotalAssets |  |
   
-**To run this code:**
+**Available fillnan-methods are:**
+- value (e.g. value:0 -> fill NaNs with 0)
+- formula (e.g. formula:Sales/TotalAssets with the column names from the "Clear Name"-column)
+- method
+   - linear(or=mean) with or can be any number or "mean"
+   - approx(other=COLUMN_NAME) with other being one or more other columns used to linearly approx that column e.g. approx(other=Sales) or approx(other=\[Sales, EBIT])
+   
+**To run this code: *([see code here](app/b_data_cleaning/data_cleaning.py))***
 ```python
 ## Get cleaned and filled data
 # General params
