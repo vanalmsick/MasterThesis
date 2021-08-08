@@ -72,8 +72,8 @@ if __name__ == '__main__':  # must be in if condition because I am pusing parall
                          test_time_steps=qrt_multiplier, shuffle=True)
     # data.single_time_rolling(val_time_steps=1, test_time_steps=1, shuffle=True)
 
-    # data.normalize(method='block')
-    data.normalize(method='time')
+    data.normalize(method='block')
+    # data.normalize(method='time')
     # data.normalize(method='set')
 
     data.compute()

@@ -220,26 +220,45 @@ class data_prep:
 
     def _get_normalization_param(self, df, idx_dict):
         # ToDo: Check if Normalization is OOS
+        print('\nCaching indices/iterators and normalization parameters:')
+        norm_get__all__ = {}
         norm_get = {}
-        for _, time_dict in idx_dict.items():
+        for all_key, time_dict in idx_dict.items():
             for i, j in time_dict['train']:
                 norm_get[f't_{i}_{j}'] = (i, j)
+                # Additional indices for block normalization
+                if ('t_' + all_key) not in norm_get__all__:
+                    norm_get__all__[('t_' + all_key)] = (i, j)
+                if norm_get__all__[('t_' + all_key)][0] > i:
+                    old_j = norm_get__all__[('t_' + all_key)][1]
+                    norm_get__all__[('t_' + all_key)] = (i, old_j)
+                if norm_get__all__[('t_' + all_key)][1] < i:
+                    old_i = norm_get__all__[('t_' + all_key)][0]
+                    norm_get__all__[('t_' + all_key)] = (old_i, j)
             for i, j in time_dict['val']:
                 norm_get[f't_{i}_{j}'] = (i, j)
             for i, j in time_dict['test']:
                 norm_get[f't_{i}_{j}'] = (i, j)
 
 
-        print('\nCaching indices/iterators and normalization parameters:')
 
         input_data_pairs = []
-        i = 1
         for key, idx in norm_get.items():
             input_data_pairs.append((df, idx[0], idx[1]))
-            i += 1
+
+        all__input_data_pairs = []
+        for key, idx in norm_get__all__.items():
+            all__input_data_pairs.append((df, idx[0], idx[1]))
 
         data = my.multiprocessing_func_with_progressbar(func=self._normalization_multicore_function, argument_list=input_data_pairs, num_processes=-1)
         norm_param_dict = dict(zip(list(norm_get.keys()), data))
+
+        print('\nCaching block normalization parameters:')
+
+        all__data = my.multiprocessing_func_with_progressbar(func=self._normalization_multicore_function, argument_list=all__input_data_pairs, num_processes=-1)
+        all__norm_param_dict = dict(zip(list(norm_get__all__.keys()), all__data))
+
+        norm_param_dict['__all__'] = all__norm_param_dict
 
         return norm_param_dict
 
@@ -396,9 +415,9 @@ class data_prep:
 
 
 
-    def _prep_final_dataset(self, df_or_args, norm_key=None, lower_idx=None, upper_idx=None, comp=None, norm_method=None):
+    def _prep_final_dataset(self, df_or_args, norm_key=None, lower_idx=None, upper_idx=None, comp=None, norm_method=None, iter_step=None):
         if type(df_or_args) != list:
-            args = [(df_or_args, norm_key, lower_idx, upper_idx, comp, norm_method)]
+            args = [(df_or_args, norm_key, lower_idx, upper_idx, comp, norm_method, iter_step)]
         else:
             args = df_or_args
 
@@ -415,7 +434,7 @@ class data_prep:
         ns = 0
         t = 0
 
-        for df, norm_key, lower_idx, upper_idx, comp, norm_method in args:
+        for df, norm_key, lower_idx, upper_idx, comp, norm_method, iter_step in args:
             t += 1
             #print(type(norm_key), norm_key, type(lower_idx), lower_idx, type(upper_idx), upper_idx, type(comp), comp, type(norm_method), norm_method)
             tmp_df = df[(df.index >= int(lower_idx)) & (df.index <= int(upper_idx)) & (df[self.dataset_company_col] == comp)]
@@ -426,8 +445,8 @@ class data_prep:
 
                 if norm_method == 'block':
                     if last_norm_key is False:
-                        mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, '__all__', 'mean').fillna(0)
-                        std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, '__all__', 'std').fillna(1)
+                        mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, '__all__', f't_{iter_step}', '__all__', 'mean').fillna(0)
+                        std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, '__all__', f't_{iter_step}', '__all__', 'std').fillna(1)
                         last_norm_key = True
                 elif norm_method == 'time-step':
                     if norm_key != last_norm_key:
@@ -534,7 +553,7 @@ class data_prep:
                 comp_iter_list = [i for i in comp_iter_list if (i != '__all__')]
                 for comp in comp_iter_list:
                     comp = type(self.data[self.dataset_company_col].iloc[0])(comp[2:])
-                    train_todo_list.append((self.data, norm_key, lower, upper, comp, norm_level))
+                    train_todo_list.append((self.data, norm_key, lower, upper, comp, norm_level, iter_step))
 
             #train_todo_list = my.sort_list_of_sub(train_todo_list, sort_element=4)
             n = 750
@@ -582,7 +601,7 @@ class data_prep:
                 comp_iter_list = [i for i in comp_iter_list if (i != '__all__')]
                 for comp in comp_iter_list:
                     comp = type(self.data[self.dataset_company_col].iloc[0])(comp[2:])
-                    val_todo_list.append((self.data, norm_key, lower, upper, comp, norm_level))
+                    val_todo_list.append((self.data, norm_key, lower, upper, comp, norm_level, iter_step))
 
             #val_todo_list = my.sort_list_of_sub(val_todo_list, sort_element=4)
             n_min = min(n, int(len(val_todo_list) / 7))
@@ -615,7 +634,7 @@ class data_prep:
                 comp_iter_list = [i for i in comp_iter_list if (i != '__all__')]
                 for comp in comp_iter_list:
                     comp = type(self.data[self.dataset_company_col].iloc[0])(comp[2:])
-                    test_todo_list.append((self.data, norm_key, lower, upper, comp, norm_level))
+                    test_todo_list.append((self.data, norm_key, lower, upper, comp, norm_level, iter_step))
 
             #test_todo_list = my.sort_list_of_sub(test_todo_list, sort_element=4)
             n_min = min(n, int(len(test_todo_list)/7))
@@ -707,8 +726,9 @@ class data_prep:
                 mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, f'c_{comp}', 'mean').fillna(0)
                 std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, f'c_{comp}', 'std').fillna(1)
             elif self.normalize_method == 'block':
-                mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, '__all__', 'mean').fillna(0)
-                std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, '__all__', 'std').fillna(1)
+                latest_block = 't_' + self.latest_out['iter_step']
+                mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, '__all__', latest_block, '__all__', 'mean').fillna(0)
+                std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, '__all__', latest_block, '__all__', 'std').fillna(1)
             norm_param.append({'mean': mean, 'std': std})
 
         example_dict['norm_param'] = norm_param
