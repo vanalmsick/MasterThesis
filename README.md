@@ -75,10 +75,12 @@ from app.c_data_prep.i_feature_engineering import feature_engerneeing
 comp_col = 'ric'
 time_cols = ['data_year', 'data_qrt']
 industry_col = 'industry'
-df_feature_engineered = feature_engerneeing(dataset=df_cleaned, comp_col=comp_col, time_cols=time_cols, industry_col=industry_col, recache=False)
+df_feature_engineered = feature_engerneeing(dataset=df_cleaned, comp_col=comp_col, time_cols=time_cols, industry_col=industry_col)
 ```
 - Data normalization (mean-std dev normalization on block/time-step/compayn-time-step-level - [see code here](app/c_data_prep/ii_data_prep.py))
-- Data sperating into training sets (caching final datasets for training to increase speed when training and feature turning - [see code here](app/c_data_prep/ii_data_prep.py))
+- Data sperating into training sets (caching final datasets for training to increase speed when training and feature turning - [see code here](app/c_data_prep/ii_data_prep.py))  
+
+**Warning:** On non UNIX-systems (e.g. Windows) this part of the code might crash because code uses multi-core processing and uses by default the number of cores as number of simultaneous processes. This might lead to the system crashing. Set not to automatic num_processes=-1 but to a number of parallel processes your PC can handle.
 ```python
 from app.c_data_prep.ii_data_prep import data_prep
 # Give cleaned and feature engineered data from step before (2.1.)

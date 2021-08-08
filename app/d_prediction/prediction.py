@@ -6,12 +6,10 @@ import shutil, time
 import matplotlib.pyplot as plt
 import numpy as np
 
-### Add other shared functions ###
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-import z_helpers as my_helpers
-import c_data_prep as my_prep
+# Working directory must be the higher .../app folder
+if str(os.getcwd())[-3:] != 'app': raise Exception(f'Working dir must be .../app folder and not "{os.getcwd()}"')
+from app.z_helpers import helpers as my_helpers
 import baseline_models, statistical_models, NN_tensorflow_models, ML_xxx_models
-##################################
 
 
 
@@ -72,7 +70,7 @@ def plot(examples_dict, normalization=True):
         x_hist = x_t[:len(y_hist_real)]
 
         plt.plot(x_hist, (y_hist_real / scale), label='Historical', marker='.', zorder=-10)
-        plt.scatter(x_true, (y_true_real / scale), edgecolors='k', label='True', c='#2ca02c', s=64)
+        plt.plot([x_hist[-1]] + x_true, (np.array([y_hist_real.tolist()[-1]] + y_true_real.tolist()) / scale), label='True', marker='.', c='#A8A8A8', zorder=-11)
 
         j = 0
         for model, pred_y in y_pred.items():
@@ -92,28 +90,33 @@ def plot(examples_dict, normalization=True):
 
 
 
-def run_all_models(train_ds, val_ds, test_ds, examples, data_props):
+def run_all_models(train_ds, val_ds, test_ds, train_np, val_np, test_np, examples, data_props):
     val_performance = {}
     test_performance = {}
 
+    """
     tmp_exampeles = baseline_models.main_run_baseline_models(train_ds, val_ds, test_ds, data=data, pred_length=4,
                                                              val_performance_dict=val_performance,
                                                              test_performance_dict=test_performance, examples=examples,
                                                              data_props=data_props)
     examples['pred'].update(tmp_exampeles)
-
+    
     tmp_exampeles = statistical_models.main_run_linear_models(train_ds, val_ds, test_ds,
                                                               val_performance_dict=val_performance,
                                                               test_performance_dict=test_performance, examples=examples,
                                                               data_props=data_props)
     examples['pred'].update(tmp_exampeles)
+    """
 
+    tmp_exampeles = statistical_models.logistic_regression_model(train_np, val_np, test_np, val_performance_dict=val_performance, test_performance_dict=test_performance, examples=examples, data_props=data_props)
+
+    """
     tmp_exampeles = NN_tensorflow_models.main_run_LSTM_models(train_ds, val_ds, test_ds,
                                                               val_performance_dict=val_performance,
                                                               test_performance_dict=test_performance, examples=examples,
                                                               data_props=data_props)
     examples['pred'].update(tmp_exampeles)
-
+    """
     return val_performance, test_performance
 
 
@@ -123,10 +126,13 @@ def run_all_models(train_ds, val_ds, test_ds, examples, data_props):
 
 
 if __name__ == '__main__':
-    my_helpers.convenience_settings()
+    # Working directory must be the higher .../app folder
+    from app.z_helpers import helpers as my
+    my.convenience_settings()
 
     ### run tensorboard
-    MLFLOW_TRACKING_URI = 'file:' + '/Users/vanalmsick/Workspace/MasterThesis/cache/MLflow'
+    # MLFLOW_TRACKING_URI = 'file:' + '/Users/vanalmsick/Workspace/MasterThesis/cache/MLflow'  # with local tracking serveer
+    MLFLOW_TRACKING_URI = 'http://0.0.0.0:5000'  # with remote tracking server with registry
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
     tracking_address = my_helpers.get_project_directories(key='tensorboard_logs')
     try:
@@ -138,22 +144,70 @@ if __name__ == '__main__':
 
 
 
+    # Dataset to use
+    dataset_name = 'handpicked_dataset'
+    yearly_data = False
 
-    data = my_prep.data_prep(dataset='handpicked_dataset2', recache=False, keep_raw_cols='default', drop_cols='default')
+    from app.b_data_cleaning import get_dataset_registry
+
+    dataset_props = get_dataset_registry()[dataset_name]
+    comp_col = dataset_props['company_col']
+    time_cols = dataset_props['iter_cols']
+    industry_col = dataset_props['industry_col']
+
+    recache_raw_data = False
+    redo_data_cleaning = False
+
+    # Cleaining settings
+    required_filled_cols_before_filling = ['sales', 'roe', 'ebit']
+    required_filled_cols_after_filling = []
+    drop_threshold_row_pct = 0.4
+    drop_threshold_row_quantile = 0.15
+    drop_threshold_col_pct = 0
+    append_data_quality_col = False
+
+    from app.c_data_prep.i_feature_engineering import get_clean_data, feature_engerneeing
+
+    df_cleaned = get_clean_data(dataset_name, recache_raw_data=recache_raw_data, redo_data_cleaning=redo_data_cleaning,
+                                comp_col=comp_col, time_cols=time_cols, industry_col=industry_col,
+                                required_filled_cols_before_filling=required_filled_cols_before_filling,
+                                required_filled_cols_after_filling=required_filled_cols_after_filling,
+                                drop_threshold_row_pct=drop_threshold_row_pct,
+                                drop_threshold_row_quantile=drop_threshold_row_quantile,
+                                drop_threshold_col_pct=drop_threshold_col_pct,
+                                append_data_quality_col=append_data_quality_col)
+
+    df_to_use = feature_engerneeing(dataset=df_cleaned, comp_col=comp_col, time_cols=time_cols,
+                                    industry_col=industry_col, yearly_data=yearly_data)
+
+    y_cols = ['y_Net income pct']
+
+    from app.c_data_prep.ii_data_prep import data_prep
+    data = data_prep(dataset=df_to_use, y_cols=y_cols, iter_cols=time_cols, comp_col=comp_col, keep_raw_cols=[],
+                     drop_cols=[])
+
     data.window(input_width=5 * 4, pred_width=4, shift=1)
-    data.block_rolling_split(val_comp_size=0, test_comp_size=0, train_time_steps=5 * 4 * 2, val_time_steps=1, test_time_steps=1, shuffle=True)
+
+    # data.block_static_split(val_comp_size=0, test_comp_size=0, val_time_size=0.2, test_time_size=0.1, shuffle=True)
+    data.block_rolling_split(val_comp_size=0, test_comp_size=0, train_time_steps=5 * 4 * 2, val_time_steps=4,
+                             test_time_steps=4, shuffle=True)
+    # data.single_time_rolling(val_time_steps=1, test_time_steps=1, shuffle=True)
+
+    # data.normalize(method='block')
     data.normalize(method='time')
+    # data.normalize(method='set')
+
     data.compute()
 
-    out = data['200201_201903']
+    out = data['199904_201804']
     data_props = data.get_data_props()
-    #data.export_to_excel()
 
     train_ds, val_ds, test_ds = data.tsds_dataset(out='all', out_dict=None)
+    train_np, val_np, test_np = data.np_dataset(out='all', out_dict=None)
     examples = data.get_examples(example_len=5, example_list=[])
     examples['pred'] = {}
 
-    val_performance, test_performance = run_all_models(train_ds=train_ds, val_ds=val_ds, test_ds=test_ds, examples=examples, data_props=data_props)
+    val_performance, test_performance = run_all_models(train_ds=train_ds, val_ds=val_ds, test_ds=test_ds, train_np=train_np, val_np=val_np, test_np=test_np, examples=examples, data_props=data_props)
 
     plot(examples_dict=examples, normalization=False)
 

@@ -6,13 +6,14 @@ import pmdarima as pm
 from sklearn.linear_model import LinearRegression
 
 # Working directory must be the higher .../app folder
+if str(os.getcwd())[-3:] != 'app': raise Exception(f'Working dir must be .../app folder and not "{os.getcwd()}"')
 from app.z_helpers import helpers as my
 
 
 
 def _download_data_from_sql(data_version='final_data', recache=False):
     from app.b_data_cleaning import get_dataset_registry
-    sql_table_name = get_dataset_registry()[dataset_name]['sql_table']
+    sql_table_name = get_dataset_registry()[data_version]['sql_table']
     query = "SELECT * FROM {}".format(sql_table_name)
 
     param_dic = my.get_credentials(credential='aws')
@@ -693,7 +694,7 @@ def _data_quality_filter(df, drop_threshold_row_pct=0.0, drop_threshold_row_quan
 def get_clean_data(data_version, recache_raw_data=False, redo_data_cleaning=False, comp_col='ric', time_cols=['data_year', 'data_qrt'], industry_col='industry', required_filled_cols_before_filling=[], required_filled_cols_after_filling=[], drop_threshold_row_pct=0.25, drop_threshold_row_quantile=0.2, drop_threshold_col_pct=0, append_data_quality_col=False):
 
     cache_folder = os.path.join(my.get_project_directories(key='cache_dir'), 'cleaned_data')
-    my_hash = my.data_hash(data_version, comp_col, time_cols, industry_col)
+    my_hash = my.data_hash(data_version, comp_col, time_cols, industry_col, required_filled_cols_before_filling, required_filled_cols_after_filling, drop_threshold_row_pct, drop_threshold_row_quantile, drop_threshold_col_pct, append_data_quality_col)
     cache_file = os.path.join(cache_folder, my_hash + '.csv')
 
     if redo_data_cleaning or not os.path.exists(cache_file):

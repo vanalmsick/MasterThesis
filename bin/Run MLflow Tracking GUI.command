@@ -1,0 +1,2 @@
+mlflow server --backend-store-uri postgresql://user:password@mlflow.URL.eu-central-1.rds.amazonaws.com --default-artifact-root "file:/Users/vanalmsick/Workspace/MasterThesis/cache/MLflow" -h 0.0.0.0 -p 5000
+open "http://localhost:5000/"

@@ -5,6 +5,7 @@ import numpy as np
 import tensorflow as tf
 
 # Working directory must be the higher .../app folder
+if str(os.getcwd())[-3:] != 'app': raise Exception(f'Working dir must be .../app folder and not "{os.getcwd()}"')
 from app.z_helpers import helpers as my
 
 
@@ -48,11 +49,11 @@ class data_prep:
 
         self.cols_drop = drop_cols
         self.cols_just_these = False
+        self.y_drop = []
+        self.y_just_these = False
 
         self.comps_exclude = []
         self.comps_just_these = False
-
-        self.lagged_col_dict = {}
 
 
 
@@ -68,7 +69,7 @@ class data_prep:
         for col in self.dataset_iter_col:
             i_col[col] = dataset[col].astype(int).astype(str).str.zfill(2)
         dataset['iter_col'] = i_col.agg(''.join, axis=1).astype(int)
-        self.iter_idx = np.array(dataset['iter_col'].unique()).tolist()
+        self.iter_idx = sorted(np.array(dataset['iter_col'].unique()).tolist())
         dataset.set_index(keys='iter_col', inplace=True)
         dataset.sort_index(inplace=True)
 
@@ -86,7 +87,8 @@ class data_prep:
         cat_cols = self.raw_data.select_dtypes(include=['object', 'category']).columns.tolist()
         # ToDo: remove dummy variable transformation as done before
         cat_cols = [i for i in cat_cols if i != self.dataset_company_col]
-        self.cols.remove('industry')
+        if 'industry' in self.cols:
+            self.cols.remove('industry')
         df = self.raw_data.copy()
         dummy_dict = {}
         #for col in cat_cols:
@@ -256,6 +258,7 @@ class data_prep:
         data_props = {}
         data_props['first_step'] = {}
         data_props['second_step'] = {}
+        data_props['third_filter'] = {}
         data_props['statistics'] = {}
         data_props['look_ups'] = {}
         data_props['final_data'] = {}
@@ -284,12 +287,12 @@ class data_prep:
         data_props['second_step']['normalize_method'] = self.normalize_method
         data_props['second_step']['norm_keep_raw'] = self.norm_keep_raw
 
-        data_props['second_step']['cols_drop'] = self.cols_drop
-        data_props['second_step']['cols_just_these'] = self.cols_just_these
-        data_props['second_step']['comps_exclude'] = self.comps_exclude
-        data_props['second_step']['comps_just_these'] = self.comps_just_these
-
-        data_props['second_step']['lagged_col_dict'] = self.lagged_col_dict
+        data_props['third_filter']['cols_drop'] = self.cols_drop
+        data_props['third_filter']['cols_just_these'] = self.cols_just_these
+        data_props['third_filter']['y_cols_drop'] = self.y_drop
+        data_props['third_filter']['y_cols_just_these'] = self.y_just_these
+        data_props['third_filter']['comps_exclude'] = self.comps_exclude
+        data_props['third_filter']['comps_just_these'] = self.comps_just_these
 
         data_props['final_data']['idx'] = {'train': self.latest_out['train']['idx'],
                                            'val': self.latest_out['val']['idx'],
@@ -361,7 +364,7 @@ class data_prep:
 
 
 
-        cache_hash = self._get_data_hash(self.dataset, self.data.index.unique().tolist(), self.window_input_width, self.window_pred_width, self.window_shift, hist_periods_in_block, val_time_steps, test_time_steps, self.lagged_col_dict)
+        cache_hash = self._get_data_hash(self.dataset, self.data.index.unique().tolist(), self.window_input_width, self.window_pred_width, self.window_shift, hist_periods_in_block, val_time_steps, test_time_steps)
         norm_cache_file = os.path.join(cache_folder, f'norm_parm_{cache_hash}.hdf5')
         iter_cache_file = os.path.join(cache_folder, f'iter_dict_{cache_hash}.pkl')
 
@@ -455,12 +458,7 @@ class data_prep:
 
                     if final_cols == False:
                         cols = self.cols
-                        if self.cols_just_these == False:
-                            final_cols = [i for i in cols if (i not in self.cols_drop) and (i not in self.dataset_iter_col) and (i != self.dataset_company_col) and (i not in self.dataset_date_cols)]
-                        else:
-                            if type(self.cols_just_these) != list:
-                                raise Exception('cols_just_these has to be a list of column names')
-                            final_cols = [i for i in self.cols_just_these if (i not in self.dataset_iter_col) and (i != self.dataset_company_col) and (i not in self.dataset_date_cols)]
+                        final_cols = [i for i in cols if (i not in self.dataset_iter_col) and (i != self.dataset_company_col) and (i not in self.dataset_date_cols)]
 
                         norm_cols = [i for i in df.columns.tolist() if (i in final_cols) and (i not in self.norm_keep_raw)]
 
@@ -497,7 +495,7 @@ class data_prep:
         if not os.path.exists(final_data_cache_folder):
             os.makedirs(final_data_cache_folder)
 
-        column_hash = self._get_data_hash(self.cols_drop, self.dataset_date_cols, self.cols_just_these, self.norm_keep_raw, self.comps_just_these, self.normalize_method, self.comps_exclude)
+        column_hash = self._get_data_hash(self.dataset_date_cols, self.norm_keep_raw, self.normalize_method, self.dataset_y_col)
         final_file = os.path.join(final_data_cache_folder, f'{column_hash}_{iter_step}_iter-step.npz')
         self.data_second_step_hash = column_hash
 
@@ -533,12 +531,7 @@ class data_prep:
             for lower, upper in train_dict:
                 norm_key = f't_{lower}_{upper}'
                 comp_iter_list = my.custom_hdf5.get_comp_list(file=self.norm_param_file, norm_key=norm_key)
-                if self.comps_just_these == False:
-                    comp_iter_list = [i for i in comp_iter_list if (i not in self.comps_exclude) and (i != '__all__')]
-                else:
-                    if type(self.comps_just_these) != list:
-                        raise Exception('comp_iter_list has to be a list of column names')
-                    comp_iter_list = self.comps_just_these
+                comp_iter_list = [i for i in comp_iter_list if (i != '__all__')]
                 for comp in comp_iter_list:
                     comp = type(self.data[self.dataset_company_col].iloc[0])(comp[2:])
                     train_todo_list.append((self.data, norm_key, lower, upper, comp, norm_level))
@@ -586,12 +579,7 @@ class data_prep:
             for lower, upper in val_dict:
                 norm_key = f't_{lower}_{upper}'
                 comp_iter_list = my.custom_hdf5.get_comp_list(file=self.norm_param_file, norm_key=norm_key)
-                if self.comps_just_these == False:
-                    comp_iter_list = [i for i in comp_iter_list if (i not in self.comps_exclude) and (i != '__all__')]
-                else:
-                    if type(self.comps_just_these) != list:
-                        raise Exception('comp_iter_list has to be a list of column names')
-                    comp_iter_list = self.comps_just_these
+                comp_iter_list = [i for i in comp_iter_list if (i != '__all__')]
                 for comp in comp_iter_list:
                     comp = type(self.data[self.dataset_company_col].iloc[0])(comp[2:])
                     val_todo_list.append((self.data, norm_key, lower, upper, comp, norm_level))
@@ -624,12 +612,7 @@ class data_prep:
             for lower, upper in test_dict:
                 norm_key = f't_{lower}_{upper}'
                 comp_iter_list = my.custom_hdf5.get_comp_list(file=self.norm_param_file, norm_key=norm_key)
-                if self.comps_just_these == False:
-                    comp_iter_list = [i for i in comp_iter_list if (i not in self.comps_exclude) and (i != '__all__')]
-                else:
-                    if type(self.comps_just_these) != list:
-                        raise Exception('comp_iter_list has to be a list of column names')
-                    comp_iter_list = self.comps_just_these
+                comp_iter_list = [i for i in comp_iter_list if (i != '__all__')]
                 for comp in comp_iter_list:
                     comp = type(self.data[self.dataset_company_col].iloc[0])(comp[2:])
                     test_todo_list.append((self.data, norm_key, lower, upper, comp, norm_level))
@@ -677,6 +660,9 @@ class data_prep:
                'columns': ndarray_columns,
                'columns_lookup': {'X': dict(zip(list(ndarray_columns['X'].values()), list(ndarray_columns['X'].keys()))),
                                   'y': dict(zip(list(ndarray_columns['y'].values()), list(ndarray_columns['y'].keys())))}}
+
+        OUT = self._apply_filters(OUT)
+
         self.latest_out = OUT
         return OUT
 
@@ -693,7 +679,7 @@ class data_prep:
         example_dict['X'] = out['test']['X'][example_list, :, :]
         example_dict['X_ds'] = tf.data.Dataset.from_tensors(example_dict['X'])
         example_dict['y'] = out['test']['y'][example_list, :, :]
-        y_col_idx_in_X = out['columns_lookup']['X'][self.dataset_y_col[0]]
+        y_col_idx_in_X = list(out['columns_lookup']['X'].values())[0]
         example_dict['y_hist'] = out['test']['X'][example_list, :, y_col_idx_in_X]
         y_col_idx_in_y = out['columns_lookup']['y'][self.dataset_y_col[0]]
         example_dict['y_true'] = out['test']['y'][example_list, :, y_col_idx_in_y]
@@ -781,10 +767,47 @@ class data_prep:
             output.append(tmp)
         return output
 
+    def np_dataset(self, out='all', out_dict=None, transpose_y=True):
+        if out_dict is None:
+            out_dict = self.latest_out
+        if out=='all':
+            out = ['train', 'val', 'test']
+        if type(out) != list:
+            out = list(out)
+        output = []
+        for i in out:
+            tmp_y = out_dict[i]['y']
+            if transpose_y:
+                tmp_y = tmp_y.reshape((-1, tmp_y.shape[2], tmp_y.shape[1]))
+            tmp = (out_dict[i]['X'], tmp_y)
+            output.append(tmp)
+        return output
+
+    def df_dataset(self, out='all', year_idx=-1, out_dict=None, transpose_y=True):
+        if out_dict is None:
+            out_dict = self.latest_out
+        if out=='all':
+            out = ['train', 'val', 'test']
+        if type(out) != list:
+            out = list(out)
+        output = []
+        for i in out:
+            tmp_y = out_dict[i]['y']
+            if transpose_y:
+                tmp_y = tmp_y.reshape((-1, tmp_y.shape[2], tmp_y.shape[1]))
+            tmp_y = tmp_y[:, year_idx, :]
+            tmp_X = out_dict[i]['X'][:, year_idx, :]
+            X_cols = list(out_dict['columns']['X'].values())
+            tmp_X = pd.DataFrame(tmp_X, columns=X_cols)
+            tmp = (tmp_X, tmp_y)
+            output.append(tmp)
+        return output
+
 
 
     def __str__(self):
-        return f"Custom-Data class:\n" \
+        return f"\n\nCustom-Data class:\n" \
+               "-------------------------------------------------------------\n" \
                f"Dataset: {self.dataset}\n" \
                f"Recache: {self.recache}\n" \
                f"Companies ({len(self.companies)}): {str(self.companies)}\n" \
@@ -793,7 +816,7 @@ class data_prep:
                f"Split method: {self.split_method}\n" \
                f"Split props: {self.split_props}\n" \
                f"Window props: ({self.window_input_width}, {self.window_pred_width}, {self.window_shift})\n" \
-               f"Data hash: {self.data_hash}"
+               f"Data hash: {self.data_hash}\n"
 
     def details(self):
         print('\n' + self.__str__() + '\n')
@@ -865,14 +888,6 @@ class data_prep:
     #############################################################
 
 
-    def lagged_variables(self, lagged_col_dict={'tr_f_ebit': [-1, -2, -3, -4]}):
-        self.computed = False
-        self.lagged_col_dict = lagged_col_dict
-
-
-    #############################################################
-
-
     def window(self, input_width=5*4, pred_width=4, shift=1):
         self.computed = False
         self.window_input_width = input_width
@@ -931,17 +946,117 @@ class data_prep:
     #############################################################
     ### After compute ###
 
-    def feature_filter(self, include_features_list=None, exclude_features_list=None):
-        pass
+    def filter_features(self, just_include=None, exclude=None):
+        if just_include is not None:
+            self.cols_just_these = just_include
+        if exclude is not None:
+            self.cols_drop = exclude
 
-    def column_filter(self, include_features_list=None, exclude_features_list=None):
-        self.feature_filter(include_features_list=include_features_list, exclude_features_list=exclude_features_list)
+    def filter_columns(self, just_include=None, exclude=None):
+        self.filter_features(just_include=just_include, exclude=exclude)
 
-    def company_filter(self, include_comp_list=None, exclude_comp_list=None):
+    def filter_y(self, just_include=None, exclude=None):
+        if just_include is not None:
+            self.y_just_these = just_include
+        if exclude is not None:
+            self.y_drop = exclude
+
+    def filter_companies(self, just_include=None, exclude=None):
         if self.normalize_method == 'block':
             warnings.warn('You set a company filter but normalize across the entire block including all companies. The company filter is not applied to the normalization.')
             self.computed = False
-        pass
+
+        if just_include is not None:
+            self.comps_just_these = just_include
+        if exclude is not None:
+            self.comps_exclude = exclude
+
+
+
+    def _apply_filters(self, OUT):
+
+        iter_step = OUT['iter_step']
+        train_X = OUT['train']['X']
+        train_y = OUT['train']['y']
+        train_idx = OUT['train']['idx']
+        val_X = OUT['val']['X']
+        val_y = OUT['val']['y']
+        val_idx = OUT['val']['idx']
+        test_X = OUT['test']['X']
+        test_y = OUT['test']['y']
+        test_idx = OUT['test']['idx']
+        cols_X = OUT['columns']['X']
+        cols_y = OUT['columns']['y']
+        cols_lookup_X = OUT['columns_lookup']['X']
+        cols_lookup_y = OUT['columns_lookup']['y']
+
+
+        # Filter X columns
+        if self.cols_just_these != False or self.cols_drop != []:
+            cols = pd.Series(OUT['columns']['X'])
+            if self.cols_just_these != False:
+                cols = cols[cols.isin(self.cols_just_these)]
+            if self.cols_drop != []:
+                cols = cols[~cols.isin(self.cols_drop)]
+            i_cols = cols.index.tolist()
+            cols.reset_index(drop=True, inplace=True)
+            cols_X = cols.to_dict()
+            cols_lookup_X = dict((v, k) for k, v in cols_X.items())
+
+            train_X = train_X[:, :, i_cols]
+            val_X = val_X[:, :, i_cols]
+            test_X = test_X[:, :, i_cols]
+
+
+        # Filter y columns
+        if self.y_just_these != False or self.y_drop != []:
+            cols = pd.Series(OUT['columns']['y'])
+            if self.y_just_these != False:
+                cols = cols[cols.isin(self.y_just_these)]
+            if self.y_drop != []:
+                cols = cols[~cols.isin(self.y_drop)]
+            i_cols = cols.index.tolist()
+            cols.reset_index(drop=True, inplace=True)
+            cols_y = cols.to_dict()
+            cols_lookup_y = dict((v, k) for k, v in cols_y.items())
+
+            train_y = train_y[:, :, i_cols]
+            val_y = val_y[:, :, i_cols]
+            test_y = test_y[:, :, i_cols]
+
+
+
+        def _sub_help_filter(X, y, idx):  # Helper for company filtering to not copy code 3x times for train val test
+            comps = pd.Series(idx[:, -1])
+            if self.comps_just_these != False:
+                comps = comps[comps.isin(self.comps_just_these)]
+            if self.comps_exclude != []:
+                comps = comps[~comps.isin(self.comps_exclude)]
+            i_comps = comps.index.tolist()
+
+            X = X[i_comps, :, :]
+            y = y[i_comps, :, :]
+            idx = idx[i_comps, :]
+
+            return X, y, idx
+
+
+        # Filter companies
+        if self.comps_just_these != False or self.comps_exclude != []:
+            train_X, train_y, train_idx = _sub_help_filter(train_X, train_y, train_idx)
+            val_X, val_y, val_idx = _sub_help_filter(val_X, val_y, val_idx)
+            test_X, test_y, test_idx = _sub_help_filter(test_X, test_y, test_idx)
+
+
+
+        OUT = {'iter_step': iter_step,
+               'train': {'X': train_X, 'y': train_y, 'idx': train_idx},
+               'val': {'X': val_X, 'y': val_y, 'idx': val_idx},
+               'test': {'X': test_X, 'y': test_y, 'idx': test_idx},
+               'columns': {'X': cols_X, 'y': cols_y},
+               'columns_lookup': {'X': cols_lookup_X, 'y': cols_lookup_y}}
+
+        return OUT
 
     #############################################################
 
@@ -975,27 +1090,47 @@ if __name__ == '__main__':
     from app.z_helpers import helpers as my
     my.convenience_settings()
 
+    # Dataset to use
     dataset_name = 'handpicked_dataset'
+
 
     from app.b_data_cleaning import get_dataset_registry
     dataset_props = get_dataset_registry()[dataset_name]
-
-    recache_data = False
     comp_col = dataset_props['company_col']
     time_cols = dataset_props['iter_cols']
     industry_col = dataset_props['industry_col']
-    y_cols = dataset_props['y_col']
-
-    from app.c_data_prep.i_feature_engineering import feature_engerneeing
-    df = feature_engerneeing(dataset=dataset_name, comp_col=comp_col, time_cols=time_cols, industry_col=industry_col, recache=False)
 
 
-    data = data_prep(dataset=df, y_cols=y_cols, iter_cols=time_cols, comp_col=comp_col, keep_raw_cols=[], drop_cols=[])
+    recache_raw_data = False
+    redo_data_cleaning = False
+
+    # Cleaining settings
+    required_filled_cols_before_filling = ['sales', 'roe', 'ebit']
+    required_filled_cols_after_filling = []
+    drop_threshold_row_pct = 0.4
+    drop_threshold_row_quantile = 0.15
+    drop_threshold_col_pct = 0
+    append_data_quality_col = False
+
+    from app.c_data_prep.i_feature_engineering import get_clean_data, feature_engerneeing
+    df_cleaned = get_clean_data(dataset_name, recache_raw_data=recache_raw_data, redo_data_cleaning=redo_data_cleaning,
+                                comp_col=comp_col, time_cols=time_cols, industry_col=industry_col,
+                                required_filled_cols_before_filling=required_filled_cols_before_filling,
+                                required_filled_cols_after_filling=required_filled_cols_after_filling,
+                                drop_threshold_row_pct=drop_threshold_row_pct,
+                                drop_threshold_row_quantile=drop_threshold_row_quantile,
+                                drop_threshold_col_pct=drop_threshold_col_pct,
+                                append_data_quality_col=append_data_quality_col)
+
+    df_to_use = feature_engerneeing(dataset=df_cleaned, comp_col=comp_col, time_cols=time_cols, industry_col=industry_col)
+
+    y_cols = ['y_roe']
+    data = data_prep(dataset=df_to_use, y_cols=y_cols, iter_cols=time_cols, comp_col=comp_col, keep_raw_cols=[], drop_cols=[])
 
     data.window(input_width=5*4, pred_width=4, shift=1)
 
     #data.block_static_split(val_comp_size=0, test_comp_size=0, val_time_size=0.2, test_time_size=0.1, shuffle=True)
-    data.block_rolling_split(val_comp_size=0, test_comp_size=0, train_time_steps=5*4*2, val_time_steps=1, test_time_steps=1, shuffle=True)
+    data.block_rolling_split(val_comp_size=0, test_comp_size=0, train_time_steps=5*4*2, val_time_steps=4, test_time_steps=4, shuffle=True)
     #data.single_time_rolling(val_time_steps=1, test_time_steps=1, shuffle=True)
 
     # data.normalize(method='block')
@@ -1005,9 +1140,9 @@ if __name__ == '__main__':
     data.compute()
 
 
-    out = data['200201_201903']
+    out = data['199904_201804']
     ds_train, ds_val, ds_test = data.tsds_dataset(out='all', out_dict=None)
-    #data.export_to_excel()
+    data.export_to_excel()
 
     print(data)
 

@@ -1,6 +1,18 @@
+import pandas as pd
 import tensorflow as tf
-import z_helpers as my_helpers
+import numpy as np
+import os
+from sklearn.linear_model import LogisticRegression
 from NN_tensorflow_models import compile_and_fit, evaluate_model
+
+
+# Working directory must be the higher .../app folder
+if str(os.getcwd())[-3:] != 'app': raise Exception(f'Working dir must be .../app folder and not "{os.getcwd()}"')
+from app.z_helpers import helpers as my_helpers
+
+
+
+
 
 def main_run_linear_models(train_ds, val_ds, test_ds, val_performance_dict, test_performance_dict, data_props, examples=None):
 
@@ -52,6 +64,28 @@ def main_run_linear_models(train_ds, val_ds, test_ds, val_performance_dict, test
 
         return example_pred
 
+
+
+def logistic_regression_model(train_np, val_np, test_np, val_performance_dict, test_performance_dict, data_props, examples=None):
+    def get_R_style_formula(y, x):
+        if type(y) == list:
+            my_y = y[0]
+        else:
+            my_y = y
+        my_x = ' + '.join(x)
+        R_style_formula = my_y + ' ~ ' + my_x + ''
+        return R_style_formula
+
+    train_X, train_y = train_np
+    test_X, test_y = test_np
+    train_X, train_y = train_X[:, -1, :], train_y[:, -1, -1]
+    test_X, test_y = test_X[:, -1, :], test_y[:, -1, -1]
+    train_y = np.array(train_y >= 0).astype(int)
+    test_y = np.array(test_y >= 0).astype(int)
+
+
+    clf = LogisticRegression(random_state=0).fit(train_X, train_y)
+    print('adf')
 
 
 

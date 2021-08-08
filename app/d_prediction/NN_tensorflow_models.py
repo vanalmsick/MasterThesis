@@ -1,8 +1,15 @@
 import tensorflow as tf
-import z_helpers as my_helpers
+import os
 import mlflow.keras
 import datetime
 import pandas as pd
+
+# Working directory must be the higher .../app folder
+if str(os.getcwd())[-3:] != 'app': raise Exception(f'Working dir must be .../app folder and not "{os.getcwd()}"')
+from app.z_helpers import helpers as my_helpers
+
+
+
 
 def compile_and_fit(model, train, val, model_name='UNKNOWN', patience=25, MAX_EPOCHS=50):
     tracking_address = my_helpers.get_project_directories(key='tensorboard_logs')
@@ -15,7 +22,7 @@ def compile_and_fit(model, train, val, model_name='UNKNOWN', patience=25, MAX_EP
 
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=TBLOGDIR, histogram_freq=1)
     model.compile(loss=tf.losses.MeanAbsoluteError(),
-                  optimizer=tf.optimizers.Adam(clipnorm=0.001),
+                  optimizer=tf.optimizers.Adam(),
                   metrics=[tf.metrics.MeanAbsoluteError(), tf.metrics.MeanAbsolutePercentageError(), tf.metrics.MeanSquaredLogarithmicError(), tf.metrics.MeanSquaredError()])
 
     if val is not None:
@@ -75,8 +82,7 @@ def main_run_LSTM_models(train_ds, val_ds, test_ds, val_performance_dict, test_p
 
     linear.add(tf.keras.layers.BatchNormalization())
     linear.add(tf.keras.layers.LSTM(32, return_sequences=True))
-    #linear.add(tf.keras.layers.BatchNormalization())
-    #linear.add(tf.keras.layers.LSTM(32))
+
 
     linear.add(tf.keras.layers.Dense(target_size, activation='softmax'))
 
@@ -97,7 +103,7 @@ def main_run_LSTM_models(train_ds, val_ds, test_ds, val_performance_dict, test_p
     """
 
     model_name = 'LSTM'
-    history, mlflow_additional_params = compile_and_fit(train=train_ds, val=val_ds, model=linear, patience=200, MAX_EPOCHS=1000, model_name=model_name)
+    history, mlflow_additional_params = compile_and_fit(train=train_ds, val=val_ds, model=linear, patience=50, MAX_EPOCHS=500, model_name=model_name)
     mlflow_additional_params['data_props'] = data_props
     val_performance_dict[model_name] = evaluate_model(model=linear, tf_data=val_ds)
     test_performance_dict[model_name] = evaluate_model(model=linear, tf_data=test_ds, mlflow_additional_params=mlflow_additional_params)

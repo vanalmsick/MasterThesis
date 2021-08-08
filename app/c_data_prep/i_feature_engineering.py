@@ -5,6 +5,7 @@ import numpy as np
 import tensorflow as tf
 
 # Working directory must be the higher .../app folder
+if str(os.getcwd())[-3:] != 'app': raise Exception(f'Working dir must be .../app folder and not "{os.getcwd()}"')
 from app.z_helpers import helpers as my
 from app.b_data_cleaning.data_cleaning import get_clean_data
 
@@ -74,7 +75,7 @@ def lev_thiagaranjan_signs(df_abs, df_pct, iter_col, company_col):
     new_df.loc[df_abs['fifovslifo'] > 0, '11_LIFO dummy'] = 1
     new_df['11_LIFO dummy'].fillna(0, inplace=True)
     # ToDo: 12_Audit dummy
-    new_df['y_eps'] = df_abs['eps']
+
     return new_df
 
 
@@ -146,8 +147,12 @@ def dummy_signs(df, dummy_cols, iter_col, company_col):
 
 
 
-def y_columns(df_abs, df_pct, iter_col, company_col, industry_col):
+def y_columns(df_abs, df_pct, iter_col, company_col, industry_col, y_cols='all', drop_y_chg_col=True):
     new_df = df_abs[[company_col] + [industry_col] + iter_col].copy()
+    new_df['t_qrt_sin'] = np.sin((new_df['data_qrt'] - 1) * np.pi / 2).astype(int)
+    new_df['t_qrt_cos'] = np.cos((new_df['data_qrt'] - 1) * np.pi / 2).astype(int)
+    #new_df['t_year sin'] = np.sin(timestamp_s * (2 * np.pi / year))
+    #new_df['t_year cos'] = np.cos(timestamp_s * (2 * np.pi / year))
     new_df['y_eps'] = df_abs['eps']
     new_df['y_eps pct'] = df_pct['eps']
     new_df['y_dividendyield'] = df_abs['dividendyield']
@@ -163,7 +168,30 @@ def y_columns(df_abs, df_pct, iter_col, company_col, industry_col):
     new_df['y_Net income'] = df_abs['netincome']
     new_df['y_Net income pct'] = df_pct['netincome']
 
-    return new_df
+    new_df['t_chg'] = np.nan
+    new_df['y_std'] = np.nan
+
+    for name, row in new_df.groupby('ric'):
+        tmp_1 = row.loc[row['data_qrt'] == 1, 'y_EBIT pct'].std()
+        tmp_2 = row.loc[row['data_qrt'] == 2, 'y_EBIT pct'].std()
+        tmp_3 = row.loc[row['data_qrt'] == 3, 'y_EBIT pct'].std()
+        tmp_4 = row.loc[row['data_qrt'] == 4, 'y_EBIT pct'].std()
+        tmp_max = max(tmp_1, tmp_2, tmp_3, tmp_4)
+        tmp_dict = {tmp_1:1, tmp_2:2, tmp_3:3, tmp_4:4}
+        new_df.loc[new_df['ric']==name, 't_chg'] = tmp_dict[tmp_max]
+        new_df.loc[new_df['ric']==name, 'y_std'] = tmp_max
+
+    new_df['t_i_qrt_sin'] = np.sin((new_df['data_qrt'] - new_df['t_chg']) * np.pi / 2).astype(int)
+    new_df['t_i_qrt_cos'] = np.cos((new_df['data_qrt'] - new_df['t_chg']) * np.pi / 2).astype(int)
+
+    new_df.drop(columns=[industry_col], inplace=True)
+    if drop_y_chg_col:
+        new_df.drop(columns=['t_chg'], inplace=True)
+
+    if y_cols == 'all':
+        return new_df
+    else:
+        return new_df[[company_col] + iter_col + y_cols]
 
 
 
@@ -177,7 +205,7 @@ def merge_df(index_cols, merge_dfs):
 
 
 
-def feature_engerneeing(dataset, comp_col, time_cols, industry_col, recache=False):
+def feature_engerneeing(dataset, comp_col, time_cols, industry_col, all_features='all', yearly_data=False):
 
     df = dataset
 
@@ -196,11 +224,49 @@ def feature_engerneeing(dataset, comp_col, time_cols, industry_col, recache=Fals
 
     df_dummy = dummy_signs(df=df, dummy_cols=[industry_col, 'sector', 'exchangename', 'headquarterscountry', 'analystrecom'], iter_col=time_cols, company_col=comp_col)
 
-    df_y = y_columns(df_abs=df, df_pct=df_pct, iter_col=time_cols, company_col=comp_col, industry_col=industry_col)
+    df_y = y_columns(df_abs=df, df_pct=df_pct, iter_col=time_cols, company_col=comp_col, industry_col=industry_col, drop_y_chg_col=yearly_data == False)
 
-    df_all = merge_df(index_cols=time_cols + [comp_col], merge_dfs=[df_lev_thi, df_ou_penn, df_xue_zha, df_dummy, df_y])
+    dfs = []
+    if all_features == 'all' or 'lev_thi' in all_features:
+        dfs.append(df_lev_thi)
+    elif all_features == 'all' or 'ou_penn' in all_features:
+        dfs.append(df_ou_penn)
+    elif all_features == 'all' or 'xue_zha' in all_features:
+        dfs.append(df_xue_zha)
+    dfs.append(df_y)
 
+
+    df_all = merge_df(index_cols=time_cols + [comp_col], merge_dfs=dfs)
+    if yearly_data:
+        print('Reduce quarterly data to yearly')
+        df_all = df_all[df_all['data_qrt'] == df_all['t_chg']]
+        df_all.drop(columns=['t_chg'], inplace=True)
+        df_all['data_qrt'] = 0
+
+
+    # ToDo: What do in the end if NaN after feature engerneeing? drop or fill?
     df_all = df_all.dropna()
+
+    # Drop outlioers
+    from scipy import stats
+    cols = df_all.columns.to_list()
+    for col in df_all.columns.to_list():
+        if df_all[col].dtype == object:
+            cols.remove(col)
+            print('not use col', col)
+        else:
+            max = df_all[col].max()
+            min = df_all[col].min()
+            if max == 1 and min == -1 or max == 1 and min == 0 or max == 0 and min == 0 or max == 1 and min == 1:
+                cols.remove(col)
+                print('not use col', col)
+    for col in time_cols:
+        if col in cols:
+            cols.remove(col)
+    df_z_check = df_all[cols]
+    keep_rows = (np.abs(stats.zscore(df_z_check.replace([np.inf, -np.inf, np.nan], 0))) < 3).all(axis=1)
+
+    df_all = df_all[keep_rows]
 
     return df_all
 
@@ -216,9 +282,27 @@ if __name__ == '__main__':
     from app.b_data_cleaning import get_dataset_registry
     dataset_props = get_dataset_registry()[dataset_name]
 
-    recache_data = False
+    recache_raw_data = False
+    redo_data_cleaning = False
+
     comp_col = dataset_props['company_col']
     time_cols = dataset_props['iter_cols']
     industry_col = dataset_props['industry_col']
 
-    df_all = feature_engerneeing(dataset=dataset_name, comp_col=comp_col, time_cols=time_cols, industry_col=industry_col, recache = False)
+    required_filled_cols_before_filling = ['sales', 'roe', 'ebit']
+    required_filled_cols_after_filling = []
+    drop_threshold_row_pct = 0.4
+    drop_threshold_row_quantile = 0.15
+    drop_threshold_col_pct = 0
+    append_data_quality_col = False
+
+    df_cleaned = get_clean_data(dataset_name, recache_raw_data=recache_raw_data, redo_data_cleaning=redo_data_cleaning,
+                                comp_col=comp_col, time_cols=time_cols, industry_col=industry_col,
+                                required_filled_cols_before_filling=required_filled_cols_before_filling,
+                                required_filled_cols_after_filling=required_filled_cols_after_filling,
+                                drop_threshold_row_pct=drop_threshold_row_pct,
+                                drop_threshold_row_quantile=drop_threshold_row_quantile,
+                                drop_threshold_col_pct=drop_threshold_col_pct,
+                                append_data_quality_col=append_data_quality_col)
+
+    df_all = feature_engerneeing(dataset=df_cleaned, comp_col=comp_col, time_cols=time_cols, industry_col=industry_col, yearly_data=False)
