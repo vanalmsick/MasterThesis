@@ -9,7 +9,11 @@ import numpy as np
 # Working directory must be the higher .../app folder
 if str(os.getcwd())[-3:] != 'app': raise Exception(f'Working dir must be .../app folder and not "{os.getcwd()}"')
 from app.z_helpers import helpers as my_helpers
-import baseline_models, statistical_models, NN_tensorflow_models, ML_xxx_models
+#from app.d_prediction.baseline_models import main_run_baseline_models as baseline_models
+#from app.d_prediction.statistical_models import main_run_statistical_models as statistical_models
+#from app.d_prediction.NN_tensorflow_models import main_run_LSTM_models as NN_tensorflow_models
+#from app.d_prediction.ML_xxx_models import main as ML_xxx_models
+
 
 
 

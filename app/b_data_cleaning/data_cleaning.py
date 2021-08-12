@@ -16,7 +16,7 @@ def _download_data_from_sql(data_version='final_data', recache=False):
     sql_table_name = get_dataset_registry()[data_version]['sql_table']
     query = "SELECT * FROM {}".format(sql_table_name)
 
-    param_dic = my.get_credentials(credential='aws')
+    param_dic = my.get_credentials(credential='aws_databases')['aws']
 
     cache_folder = os.path.join(my.get_project_directories(key='cache_dir'), 'raw_data')
     data_file = os.path.join(cache_folder, (data_version + '.csv'))
@@ -715,7 +715,22 @@ def get_clean_data(data_version, recache_raw_data=False, redo_data_cleaning=Fals
 
         info_text += tmp_info_text
 
+        def highlight_diff(data, color='yellow'):
+            attr = 'background-color: {}'.format(color)
+            other = data.xs('First', axis='columns', level=-1)
+            return pd.DataFrame(np.where(data.ne(other, level=0), attr, ''),
+                                index=data.index, columns=data.columns)
+
+        pre_df = df.copy().reset_index()
         dataset_nan_fill(df, company_col=comp_col, time_cols=time_cols, industry_col=industry_col, data_props = data_props, fillnan_formulas=fillnan_formulas, formula_iterations=3)
+        post_df = df.copy().reset_index()
+
+        df_all = pd.concat(
+            [pre_df.set_index(['ric', 'data_year', 'data_qrt']), post_df.set_index(['ric', 'data_year', 'data_qrt'])],
+            axis='columns', keys=['First', 'Second'])
+        df_final = df_all.swaplevel(axis='columns')[
+            [col for col in pre_df.columns.to_list() if col not in ['ric', 'data_year', 'data_qrt']]]
+        df_final.style.apply(highlight_diff, axis=None)
 
         len_df = len(df)
         df = df.loc[df[required_filled_cols_after_filling].notna().all(axis=1)]  # drop row based on required filled columns

@@ -459,6 +459,10 @@ class data_prep:
                         std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, norm_key, f'c_{comp}', 'std').fillna(1)
                         last_norm_key = norm_key
                         last_comp = comp
+                elif norm_method == 'no':
+                    cols = df.columns.tolist()
+                    mean = pd.Series(0, index=cols)
+                    std = pd.Series(1, index=cols)
 
 
                 sort_cols = self.dataset_iter_col + [self.dataset_company_col]
@@ -729,6 +733,9 @@ class data_prep:
                 latest_block = 't_' + self.latest_out['iter_step']
                 mean = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, '__all__', latest_block, '__all__', 'mean').fillna(0)
                 std = my.custom_hdf5.hdf5_to_pd(self.norm_param_file, '__all__', latest_block, '__all__', 'std').fillna(1)
+            elif self.normalize_method == 'no':
+                mean = 0
+                std = 1
             norm_param.append({'mean': mean, 'std': std})
 
         example_dict['norm_param'] = norm_param
@@ -743,16 +750,14 @@ class data_prep:
     def __iter__(self):
         if self.computed is False:
             self.compute()
-        self._custom_iter_ = iter(self.iter_idx)
+        self._custom_iter_ = iter(list(self.iter_dict.keys()))
         return self
 
     def __next__(self):
         current = next(self._custom_iter_)
-        train_np, val_np, test_np = self._final_dataset(train_dict=current['train'], val_dict=current['val'], test_dict=current['test'])
-        #if self.current < self.high:
-        #    return self.current
-        #raise StopIteration
-        return train_np, val_np, test_np
+        data_dict = self._final_dataset(train_dict=self.iter_dict[current]['train'], val_dict=self.iter_dict[current]['val'],
+                                        test_dict=self.iter_dict[current]['test'], iter_step=current, data_hash=self.data_hash)
+        return data_dict
 
     ####################################
 
@@ -959,6 +964,8 @@ class data_prep:
             self.normalize_method = 'time-step'
         elif method == 'set' or method == 'company-time-set':
             self.normalize_method = 'set'
+        elif method == False or method == 'no':
+            self.normalize_method = 'no'
         else:
             raise Exception(f'UNKNOWN method={method} for normalization. Possible are: block / time / set.')
 

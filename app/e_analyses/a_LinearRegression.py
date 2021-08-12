@@ -54,14 +54,14 @@ if __name__ == '__main__':  # must be in if condition because I am pusing parall
                             append_data_quality_col=append_data_quality_col)
 
     features = ['lev_thi']
+    features = 'all'
     df_to_use = feature_engerneeing(dataset=df_cleaned, comp_col=comp_col, time_cols=time_cols,
                                 industry_col=industry_col, yearly_data=yearly_data, all_features=features)
 
     y_cols = ['y_eps', 'y_eps pct', 'y_dividendyield', 'y_dividendyield pct', 'y_dividendperstock', 'y_dividendperstock pct', 'y_roe', 'y_roe pct', 'y_roa', 'y_roa pct', 'y_EBIT', 'y_EBIT pct', 'y_Net income', 'y_Net income pct']
 
     from app.c_data_prep.ii_data_prep import data_prep
-    data = data_prep(dataset=df_to_use, y_cols=y_cols, iter_cols=time_cols, comp_col=comp_col, keep_raw_cols=[],
-                 drop_cols=[])
+    data = data_prep(dataset=df_to_use, y_cols=y_cols, iter_cols=time_cols, comp_col=comp_col, keep_raw_cols=[], drop_cols=[])
 
     qrt_multiplier = 1 if yearly_data else 4
 
@@ -72,7 +72,8 @@ if __name__ == '__main__':  # must be in if condition because I am pusing parall
                          test_time_steps=qrt_multiplier, shuffle=True)
     # data.single_time_rolling(val_time_steps=1, test_time_steps=1, shuffle=True)
 
-    data.normalize(method='block')
+    data.normalize(method='no')
+    #data.normalize(method='block')
     # data.normalize(method='time')
     # data.normalize(method='set')
 
@@ -80,74 +81,92 @@ if __name__ == '__main__':  # must be in if condition because I am pusing parall
 
     print(data)
 
+    out = data['200300_201900']
+    train, val, test = data.df_dataset(out='all', out_dict=None)
+    train_X, train_y = train
+    test_X, test_y = test
 
-    # Filter
-    data.filter_features(just_include=['1_inventory', '3_cap exp', '4_RnD', '5_gross margin', '6_sales admin exp', '9_order backlog', '10_labor force', '11_FIFO dummy', '11_LIFO dummy'], exclude=None)
+    # drop columns and levae one with high correlation
+    corr_matrix = train_X.corr()
+    corr_matrix.replace([np.nan, np.inf, -np.inf], 0, inplace=True)
+
+    columns = np.full((corr_matrix.shape[0],), True, dtype=bool)
+    for i in range(corr_matrix.shape[0]):
+        for j in range(i + 1, corr_matrix.shape[0]):
+            if corr_matrix.iloc[i, j] >= 0.9:
+                if columns[j]:
+                    columns[j] = False
+
+    columns = corr_matrix.index[columns].to_list()
+    data.filter_features(just_include=columns, exclude=None)
     data.filter_y(just_include=['y_eps'], exclude=None)
-    data.filter_companies(just_include=None, exclude=None)
-
 
     out = data['200300_201900']
-    data_props = data.get_data_props()
-
-    train_np, val_np, test_np = data.df_dataset(out='all', out_dict=None)
-    examples = data.get_examples(example_len=5, example_list=[])
-    examples['pred'] = {}
+    train, val, test = data.df_dataset(out='all', out_dict=None)
+    train_X, train_y = train
+    test_X, test_y = test
 
 
+    # drop by p-value
+    import statsmodels.api as sm
+    def backwardElimination(x, Y, sl, columns):
+        numVars = len(x[0])
+        for i in range(0, numVars):
+            regressor_OLS = sm.OLS(Y, x).fit()
+            maxVar = max(regressor_OLS.pvalues).astype(float)
+            if maxVar > sl:
+                for j in range(0, numVars - i):
+                    if (regressor_OLS.pvalues[j].astype(float) == maxVar):
+                        x = np.delete(x, j, 1)
+                        columns = np.delete(columns, j)
 
-    train_X, train_y = train_np
-    test_X, test_y = test_np
-    #test_X = sm.add_constant(test_X, has_constant='add')
-    #train_X = sm.add_constant(train_X, has_constant='add')
+        regressor_OLS.summary()
+        return x, columns
 
-    logisticRegr = LinearRegression()
-    logisticRegr.fit(train_X, train_y)
+
+    SL = 0.15
+    data_modeled, selected_columns = backwardElimination(train_X.values, train_y.flatten(), SL, columns)
+
+    selected_columns = selected_columns.tolist()
+    data.filter_features(just_include=selected_columns, exclude=None)
+    data.filter_y(just_include=['y_eps'], exclude=None)
+
+    out = data['200300_201900']
+    train, val, test = data.df_dataset(out='all', out_dict=None)
+    train_X, train_y = train
+    test_X, test_y = test
 
     model = sm.OLS(train_y.flatten(), train_X)
     results = model.fit()
     print(results.summary())
 
-    #perm = PermutationImportance(logisticRegr, random_state=1).fit(test_X, test_y)
-    #feature_importances = pd.DataFrame(np.array([['const'] + data_props['final_data']['cols']['X'], perm.feature_importances_, perm.feature_importances_std_]).T, columns=['feature', 'feature_importance', 'feature_importance_std'])
-    #feature_importances['feature_importance_abs'] = abs(feature_importances['feature_importance'].astype(float))
-    #feature_importances.sort_values('feature_importance_abs', ascending=False, inplace=True)
-    #print(feature_importances)
+    p_values = pd.DataFrame(index=selected_columns)
+    coef = pd.DataFrame(index=selected_columns)
+    r_squared = []
 
-    import numpy as np
-    from scipy.stats import norm
-    from sklearn.linear_model import LogisticRegression
-    import sklearn
+    # Test on all data time-steps
+    for out in data:
+        train, val, test = data.df_dataset(out='all', out_dict=None)
+        train_X, train_y = train
+        test_X, test_y = test
 
+        model = sm.OLS(train_y.flatten(), train_X)
+        results = model.fit()
+        #print(results.summary())
+        p_values[out['iter_step']] = results.pvalues
+        coef[out['iter_step']] = results.params
+        r_squared.append(results.rsquared)
+        print(out['iter_step'], results.rsquared)
+        print('1% level', (results.pvalues <= 0.01).value_counts()[True], '5% level', ((results.pvalues > 0.01) & (results.pvalues <= 0.05)).value_counts()[True], '10% level', ((results.pvalues > 0.05) & (results.pvalues <= 0.10)).value_counts()[True])
 
-    def logit_pvalue(model, x, round=False):
-        """ Calculate z-scores for scikit-learn LogisticRegression.
-        parameters:
-            model: fitted sklearn.linear_model.LogisticRegression with intercept and large C
-            x:     matrix on which the model was fit
-        This function uses asymtptics for maximum likelihood estimates.
-        """
-        p = model.predict_proba(x)
-        n = len(p)
-        m = len(model.coef_[0]) + 1
-        coefs = np.concatenate([model.intercept_, model.coef_[0]])
-        x_full = np.matrix(np.insert(np.array(x), 0, 1, axis=1))
-        ans = np.zeros((m, m))
-        for i in range(n):
-            ans = ans + np.dot(np.transpose(x_full[i, :]), x_full[i, :]) * p[i, 1] * p[i, 0]
-        try:
-            vcov = np.linalg.inv(np.matrix(ans))
-        except:
-            warnings.warn('Use pseudo inverse matrix because of singular matrix issue.')
-            vcov = np.linalg.pinv(np.matrix(ans))
-        se = np.sqrt(np.diag(vcov))
-        t = coefs / se
-        p = (1 - norm.cdf(abs(t))) * 2
-        if round != False:
-            p = p.round(round)
-        return p
+        import statsmodels
+        ypred = results.predict(test_X)
+        mae = statsmodels.tools.eval_measures.meanabs(ypred, test_y.flatten())
+        print('OOS MAE:', mae)
 
+        examples = data.get_examples(example_len=5, example_list=[])
+        examples['pred'] = {}
+        examples['pred']['OLS'] = np.reshape(results.predict(examples['X'][:, -1, :]), (-1, 1))
 
-    #print(logit_pvalue(logisticRegr, train_X))
-
-
+        from app.d_prediction.prediction import plot
+        plot(examples_dict=examples, normalization=False)

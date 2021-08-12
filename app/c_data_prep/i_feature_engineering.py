@@ -149,8 +149,6 @@ def dummy_signs(df, dummy_cols, iter_col, company_col):
 
 def y_columns(df_abs, df_pct, iter_col, company_col, industry_col, y_cols='all', drop_y_chg_col=True):
     new_df = df_abs[[company_col] + [industry_col] + iter_col].copy()
-    new_df['t_qrt_sin'] = np.sin((new_df['data_qrt'] - 1) * np.pi / 2).astype(int)
-    new_df['t_qrt_cos'] = np.cos((new_df['data_qrt'] - 1) * np.pi / 2).astype(int)
     #new_df['t_year sin'] = np.sin(timestamp_s * (2 * np.pi / year))
     #new_df['t_year cos'] = np.cos(timestamp_s * (2 * np.pi / year))
     new_df['y_eps'] = df_abs['eps']
@@ -168,25 +166,8 @@ def y_columns(df_abs, df_pct, iter_col, company_col, industry_col, y_cols='all',
     new_df['y_Net income'] = df_abs['netincome']
     new_df['y_Net income pct'] = df_pct['netincome']
 
-    new_df['t_chg'] = np.nan
-    new_df['y_std'] = np.nan
-
-    for name, row in new_df.groupby('ric'):
-        tmp_1 = row.loc[row['data_qrt'] == 1, 'y_EBIT pct'].std()
-        tmp_2 = row.loc[row['data_qrt'] == 2, 'y_EBIT pct'].std()
-        tmp_3 = row.loc[row['data_qrt'] == 3, 'y_EBIT pct'].std()
-        tmp_4 = row.loc[row['data_qrt'] == 4, 'y_EBIT pct'].std()
-        tmp_max = max(tmp_1, tmp_2, tmp_3, tmp_4)
-        tmp_dict = {tmp_1:1, tmp_2:2, tmp_3:3, tmp_4:4}
-        new_df.loc[new_df['ric']==name, 't_chg'] = tmp_dict[tmp_max]
-        new_df.loc[new_df['ric']==name, 'y_std'] = tmp_max
-
-    new_df['t_i_qrt_sin'] = np.sin((new_df['data_qrt'] - new_df['t_chg']) * np.pi / 2).astype(int)
-    new_df['t_i_qrt_cos'] = np.cos((new_df['data_qrt'] - new_df['t_chg']) * np.pi / 2).astype(int)
 
     new_df.drop(columns=[industry_col], inplace=True)
-    if drop_y_chg_col:
-        new_df.drop(columns=['t_chg'], inplace=True)
 
     if y_cols == 'all':
         return new_df
@@ -202,12 +183,70 @@ def merge_df(index_cols, merge_dfs):
     return new_df
 
 
+def _reduce_qrt_to_yrl(df, col='eps'):
+
+    df.set_index(['ric'] + ['data_year', 'data_qrt'], inplace=True)
+    df.sort_index(inplace=True)
+    df['y_pct_chg_ident'] = df[col].groupby(level=['ric']).shift(1)
+    df.reset_index(inplace=True)
+    df[['t_chg', 'y_std']] = np.nan
+
+    for name, row in df.groupby('ric'):
+        tmp_1 = row.loc[row['data_qrt'] == 1, 'y_pct_chg_ident'].std()
+        tmp_2 = row.loc[row['data_qrt'] == 2, 'y_pct_chg_ident'].std()
+        tmp_3 = row.loc[row['data_qrt'] == 3, 'y_pct_chg_ident'].std()
+        tmp_4 = row.loc[row['data_qrt'] == 4, 'y_pct_chg_ident'].std()
+        tmp_max = max(tmp_1, tmp_2, tmp_3, tmp_4)
+        tmp_dict = {tmp_1:1, tmp_2:2, tmp_3:3, tmp_4:4}
+        df.loc[df['ric']==name, 't_chg'] = tmp_dict[tmp_max]
+        df.loc[df['ric']==name, 'y_std'] = tmp_max
+
+    df_all = df[df['data_qrt'] == df['t_chg']]
+
+    #df_all['t_i_qrt_sin'] = np.sin((df_all['t_chg']) * np.pi / 2) #.astype(int)
+    #df_all['t_i_qrt_cos'] = np.cos((df_all['t_chg']) * np.pi / 2) #.astype(int)
+
+
+    df_all.drop(columns=['y_std', 'y_pct_chg_ident'], inplace=True)
+    df_all['data_qrt'] = 0
+
+    return df_all
+
+
+def _lagged_variables(df, lagged_dict={'__all__': [1, 2, 3, 4]}, comp_col=['ric'], time_cols=['data_year', 'data_qrt'], exclude_cols=[]):
+    if '__all__' in lagged_dict:
+        all_cols = df.columns.tolist()
+        all_cols = [col for col in all_cols if col not in lagged_dict and col not in comp_col and col not in time_cols and col not in exclude_cols]
+        for col in all_cols:
+            lagged_dict[col] = lagged_dict['__all__']
+        lagged_dict.pop('__all__')
+
+    for col in exclude_cols:
+        lagged_dict.pop(col, None)
+
+    df.set_index(comp_col + time_cols, inplace=True)
+    df.sort_index(inplace=True)
+
+    for col, shifts in lagged_dict.items():
+        for shift in shifts:
+            df[col + f'_sft_{shift}'] = df[col].groupby(level=['ric']).shift(shift)
+
+    df.reset_index(inplace=True)
+
+    return df
+
 
 
 
 def feature_engerneeing(dataset, comp_col, time_cols, industry_col, all_features='all', yearly_data=False):
 
     df = dataset
+
+    df['t_qrt_sin'] = np.sin((df['data_qrt'] - 1) * np.pi / 2).astype(int)
+    df['t_qrt_cos'] = np.cos((df['data_qrt'] - 1) * np.pi / 2).astype(int)
+
+    if yearly_data:
+        df = _reduce_qrt_to_yrl(df, col='eps')
 
     df_ind_avg = industry_average(df, time_cols=time_cols, industry_cols=[industry_col], reset_index=True)
     df = df.merge(df_ind_avg[time_cols + [industry_col] + ['capitalexpenditures', 'randd']], how='left', on=time_cols + [industry_col], validate='many_to_one', suffixes=['', '_avg'])
@@ -229,20 +268,19 @@ def feature_engerneeing(dataset, comp_col, time_cols, industry_col, all_features
     dfs = []
     if all_features == 'all' or 'lev_thi' in all_features:
         dfs.append(df_lev_thi)
-    elif all_features == 'all' or 'ou_penn' in all_features:
+    if all_features == 'all' or 'ou_penn' in all_features:
         dfs.append(df_ou_penn)
-    elif all_features == 'all' or 'xue_zha' in all_features:
+    if all_features == 'all' or 'xue_zha' in all_features:
         dfs.append(df_xue_zha)
     dfs.append(df_y)
 
 
     df_all = merge_df(index_cols=time_cols + [comp_col], merge_dfs=dfs)
-    if yearly_data:
-        print('Reduce quarterly data to yearly')
-        df_all = df_all[df_all['data_qrt'] == df_all['t_chg']]
-        df_all.drop(columns=['t_chg'], inplace=True)
-        df_all['data_qrt'] = 0
 
+    df_all = _lagged_variables(df_all, lagged_dict={'__all__': [1, 2, 3, 4]}, comp_col=[comp_col],
+                           time_cols=time_cols, exclude_cols=[industry_col, 'sector', 'exchangename', 'headquarterscountry', 'analystrecom'])
+
+    df_all = df_all.replace(['inf', 'nan', '-inf', np.inf, -np.inf, np.nan], np.nan)
 
     # ToDo: What do in the end if NaN after feature engerneeing? drop or fill?
     df_all = df_all.dropna()
@@ -264,7 +302,7 @@ def feature_engerneeing(dataset, comp_col, time_cols, industry_col, all_features
         if col in cols:
             cols.remove(col)
     df_z_check = df_all[cols]
-    keep_rows = (np.abs(stats.zscore(df_z_check.replace([np.inf, -np.inf, np.nan], 0))) < 3).all(axis=1)
+    keep_rows = (np.abs(stats.zscore(df_z_check.replace(['inf', 'nan', np.inf, -np.inf, np.nan], 0))) < 3).all(axis=1)
 
     df_all = df_all[keep_rows]
 
