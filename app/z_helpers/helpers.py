@@ -364,6 +364,159 @@ class custom_hdf5:
         return a
 
 
+from regressors import stats
+from docx import Document
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+def word_regression_table(model, X, y, output_file, title=None, overwrite_summary={}):
+    titel = 'default' if title is None else title
+    y_col = y.name
+    X_cols = X.columns.tolist()
+
+
+    def _modified_regressor_summary(clf, X, y, xlabels=None):
+        """
+        Output summary statistics for a fitted regression model.
+
+        Parameters
+        ----------
+        clf : sklearn.linear_model
+            A scikit-learn linear model classifier with a `predict()` method.
+        X : numpy.ndarray
+            Training data used to fit the classifier.
+        y : numpy.ndarray
+            Target training values, of shape = [n_samples].
+        xlabels : list, tuple
+            The labels for the predictors.
+        """
+        # Check and/or make xlabels
+        ncols = X.shape[1]
+        if xlabels is None:
+            xlabels = np.array(
+                ['x{0}'.format(i) for i in range(1, ncols + 1)], dtype='str')
+        elif isinstance(xlabels, (tuple, list)):
+            xlabels = np.array(xlabels, dtype='str')
+        # Make sure dims of xlabels matches dims of X
+        if xlabels.shape[0] != ncols:
+            raise AssertionError(
+                "Dimension of xlabels {0} does not match "
+                "X {1}.".format(xlabels.shape, X.shape))
+        # Create data frame of coefficient estimates and associated stats
+        coef_df = pd.DataFrame(
+            index=['_intercept'] + list(xlabels),
+            columns=['Estimate', 'Std. Error', 't value', 'p value']
+        )
+        coef_df['Estimate'] = np.concatenate(
+            (np.round(np.array([clf.intercept_]), 6), np.round((clf.coef_), 6)))
+        coef_df['Std. Error'] = np.round(stats.coef_se(clf, X, y), 6)
+        coef_df['t value'] = np.round(stats.coef_tval(clf, X, y), 4)
+        coef_df['p value'] = np.round(stats.coef_pval(clf, X, y), 6)
+        # Create data frame to summarize residuals
+        resids = stats.residuals(clf, X, y, r_type='raw')
+        resids_df = pd.DataFrame({
+            'Min': pd.Series(np.round(resids.min(), 4)),
+            '1Q': pd.Series(np.round(np.percentile(resids, q=25), 4)),
+            'Median': pd.Series(np.round(np.median(resids), 4)),
+            '3Q': pd.Series(np.round(np.percentile(resids, q=75), 4)),
+            'Max': pd.Series(np.round(resids.max(), 4)),
+        }, columns=['Min', '1Q', 'Median', '3Q', 'Max'])
+
+        return resids_df, coef_df, {'R2': stats.metrics.r2_score(y, clf.predict(X)), 'Adj R2': stats.adj_r2_score(clf, X, y),
+                                    'F-statistic': stats.f_stat(clf, X, y)}
+
+    def _round_if_number(s):
+        if type(s) == int:
+            return s
+        try:
+            float(s)
+            s = format(round(s, 3), '.3f')
+            return s
+        except ValueError:
+            return s
+
+
+    def _dict_to_np(param):
+        rows = int(np.ceil(len(param)/2))
+        arr = np.empty((rows, 4), dtype=np.dtype(object))
+        for i, key in zip(range(len(param)), param):
+            if i >= rows:
+                y = i - rows
+                x = 2
+            else:
+                y = i
+                x = 0
+            arr[y, x] = key
+            arr[y, x + 1] = _round_if_number(param[key])
+        return arr
+
+
+    def _df_to_np(df, ignore_idx=False, ignore_head=False):
+        cols = df.columns.tolist()
+        idxs = df.index.tolist()
+        i_idx = 0 if ignore_idx else 1
+        i_col = 0 if ignore_head else 1
+        arr = np.empty((len(idxs) + i_col, len(cols) + i_idx), dtype=np.dtype(object))
+        arr = np.where(arr is None, arr, '')
+        # Write index
+        if ignore_idx is False:
+            for y in range(i_col, len(idxs) + i_col):
+                arr[y, 0] = idxs[y - i_col]
+        # Write cols
+        if ignore_head is False:
+            for x in range(i_idx, len(cols) + i_idx):
+                arr[0, x] = cols[x - i_idx]
+        #  Write values
+        df_val = df.values
+        for y in range(i_col, len(idxs) + i_col):
+            for x in range(i_idx, len(cols) + i_idx):
+                arr[y, x] = _round_if_number(df_val[y - i_col, x - i_idx])
+        return arr
+
+    def _add_table(doc, arr, right_every_second=False, right_every_after=False, all_centered=False):
+        table = doc.add_table(rows=(arr.shape[0]), cols=arr.shape[1])
+        for y in range(arr.shape[0]):
+            for x in range(arr.shape[1]):
+                table.cell(y, x).text = str(arr[y, x])
+                if right_every_second and x % 2 != 0:
+                    table.cell(y, x).paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                if right_every_after != False and x >= right_every_after:
+                    table.cell(y, x).paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                if all_centered:
+                    table.cell(y, x).paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+
+    resids_df, coef_df, params = _modified_regressor_summary(model, X.values, y.values, X_cols)
+    document = Document()
+    document.add_heading(titel)
+
+
+    model_name = str(model) if str(model).find('(') == -1 else str(model)[:str(model).find('(')]
+    summ_stats = {'Dep. Variable:': y.name,
+                  'Model:': model_name,
+                  'No. Observations:': len(X),
+                  'R-squared:': params['R2'],
+                  'Adj. R-squared:': params['Adj R2'],
+                  'F-statistic:': params['F-statistic']}
+    for key, value in overwrite_summary.items():
+        summ_stats[key] = value
+    summ_stats = _dict_to_np(summ_stats)
+    np_arr = summ_stats
+
+    coef_df.rename(columns={'Estimate':'coef', 'Std. Error':'std err', 't value':'t', 'p value':'P>|t|'}, inplace=True)
+    coef_arr = _df_to_np(coef_df)
+    res_arr = _df_to_np(resids_df, ignore_idx=True)
+
+    _add_table(doc=document, arr=np.array([[titel]]), all_centered=True)
+    _add_table(doc=document, arr=np_arr, right_every_second=True)
+    _add_table(doc=document, arr=coef_arr, right_every_after=1)
+    _add_table(doc=document, arr=np.array([['Residuals']]), all_centered=True)
+    _add_table(doc=document, arr=res_arr, all_centered=True)
+
+    document.save(output_file)
+
+
+
+
+
 
 def mlflow_last_run_add_param(param_dict):
     last_experiment_id, last_run_id, _ = mlflow.search_runs(order_by=['attribute.end_time DESC'])[['experiment_id', 'run_id', 'end_time']].iloc[0]
