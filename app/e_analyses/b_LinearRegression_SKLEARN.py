@@ -270,10 +270,12 @@ if __name__ == '__main__':  # must be in if condition because I am pusing parall
 
         # Fit the grid search objects
         print('Performing model optimizations...')
-        best_acc = 0.0
+        best_acc = -1000000.0
         best_clf = 0
         best_gs = ''
         best_cols = []
+        best_scaler = 0
+        best_clf = 0
         for grid_name, grid in grids.items():
             print('\nEstimator: %s' % grid_name)
             # Fit grid search
@@ -293,16 +295,28 @@ if __name__ == '__main__':  # must be in if condition because I am pusing parall
             # Track best (highest test accuracy) model
             if error > best_acc:
                 best_acc = error
-                best_gs = grid
+                best_gs = grid.best_params_
                 best_clf = grid_name
                 best_cols = relevant_cols
+                best_scaler = grid.best_estimator_.steps[0][1]
+                best_clf = grid.best_estimator_.steps[-1][1]
 
         print('\nClassifier with best test set accuracy: %s' % best_clf)
+        tmp_scaler_X = best_scaler.fit(train_X)
+        tmp_oos_X = pd.DataFrame(tmp_scaler_X.transform(oos_X), columns=oos_X.columns)[best_cols]
+        tmp_scaler_y = best_scaler.fit(train_y.reshape((-1, 1)))
+        tmp_oos_y = tmp_scaler_y.transform(oos_y.reshape((-1, 1)))
+
+        print('Train R:', best_clf.score(tmp_oos_X, tmp_oos_y))
+        print('OOS R:', best_clf.score(tmp_oos_X, tmp_oos_y))
+        stats.summary(best_clf, tmp_oos_X, tmp_oos_y, tmp_oos_X.columns.tolist())
+
         with open('best_linear_model.txt', 'a') as f:
             f.write(f'Best model: {best_clf}\n')
             f.write(f'Error: {best_acc}\n')
             f.write(f'Params: {best_gs}\n')
             f.write(f'Cols: {best_cols}\n')
+            f.write(f"Data time-step:{out['iter_step']}\n")
             f.write(f'--------------------------\n')
 
 
