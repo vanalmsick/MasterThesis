@@ -19,8 +19,10 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV, ParameterGrid
 from tensorflow.keras.wrappers.scikit_learn import KerasClassifier, KerasRegressor
-
 import math
+from hyperopt import hp, fmin, tpe, STATUS_OK, Trials
+
+
 def FindLayerNodesLinear(n_layers, first_layer_nodes, last_layer_nodes):
     layers = []
 
@@ -35,6 +37,7 @@ def FindLayerNodesLinear(n_layers, first_layer_nodes, last_layer_nodes):
 
     return layers
 
+
 def createmodel(n_layers, first_layer_nodes, last_layer_nodes, activation_func, input_size, output_size, **kwargs):
     model = Sequential()
     n_nodes = FindLayerNodesLinear(n_layers, first_layer_nodes, last_layer_nodes)
@@ -46,11 +49,9 @@ def createmodel(n_layers, first_layer_nodes, last_layer_nodes, activation_func, 
 
     # Finally, the output layer should have a single node in binary classification
     model.add(Dense(output_size, activation=activation_func))
-    #model.compile(optimizer='adam', loss=loss_func, metrics=["accuracy"])  # note: metrics could also be 'mse'
 
     return model
 
-from hyperopt import hp, fmin, tpe, STATUS_OK, Trials
 
 def main_run_linear_models(train_ds, val_ds, test_ds, val_performance_dict, test_performance_dict, data_props, examples=None):
 
@@ -61,22 +62,28 @@ def main_run_linear_models(train_ds, val_ds, test_ds, val_performance_dict, test
     test_X, test_y = tf.data.experimental.get_single_element(test_ds)
     test_y = tf.squeeze(test_y)
 
-    periods = 1
-    best_score = 100000000000000
+
+    def _hp_tranform_param_dict(param_dict):
+        new_param_dict = {}
+        for key, value in param_dict.items():
+            if type(value) == list:
+                new_param_dict[key] = hp.choice(key, value)
+            elif type(value) == set:
+                new_param_dict[key] = hp.uniform(key, *values)
+            else:
+                new_param_dict[key] = value
+        return new_param_dict
 
 
-    model = KerasRegressor(build_fn=createmodel) #, verbose=False
-    activation_funcs = ['sigmoid', 'relu', 'tanh']
-    param_grid = dict(n_layers=hp.choice('n_layers', [1, 2, 3]),
-                      first_layer_nodes=hp.choice('first_layer_nodes',[128, 64, 32, 16]),
-                      last_layer_nodes=hp.choice('last_layer_nodes',[32, 16, 4]),
-                      activation_func=hp.choice('activation_func',activation_funcs),
-                      input_size=train_X.shape[-1], output_size=1,
-                      backlooking_window=hp.choice('backlooking_window', [1, 2, 3, 4]))
+    param_grid = dict(n_layers=[1, 2, 3],
+                      first_layer_nodes=[128, 64, 32, 16],
+                      last_layer_nodes=[32, 16, 4],
+                      activation_func=['sigmoid', 'relu', 'tanh'],
+                      backlooking_window=[1, 2, 3, 4])
+    hp_param_dict = _hp_tranform_param_dict(param_dict=param_grid)
 
-    warnings.filterwarnings('ignore')
 
-    def _optimize_objective(kwargs):
+    def _optimize_objective(kwargs, return_everything=False, verbose=0):
         now = datetime.datetime.now()
         date_time = str(now.strftime("%y%m%d%H%M%S"))
         model_name = f"{date_time}_linear_{kwargs['backlooking_window']}_{kwargs['n_layers']}"
@@ -95,11 +102,12 @@ def main_run_linear_models(train_ds, val_ds, test_ds, val_performance_dict, test
         tmp_test_ds = tf.data.Dataset.from_tensors((tmp_test_X, test_y))
 
         kwargs['input_size'] = tmp_train_X.shape[-1]
+        kwargs['output_size'] = 1 if len(set(test_y.shape)) == 1 else train_y.shape[-1]
 
         model = createmodel(**kwargs)
         history, mlflow_additional_params = compile_and_fit(model=model, train=tmp_train_ds, val=tmp_val_ds,
                                                             MAX_EPOCHS=800, patience=25, model_name=model_name,
-                                                            verbose=0)
+                                                            verbose=verbose)
         ML_kwargs = dict(kwargs)
         try:
             ML_kwargs.pop('batch_size')
@@ -122,17 +130,38 @@ def main_run_linear_models(train_ds, val_ds, test_ds, val_performance_dict, test
         return_metrics = dict(loss=val_performance_dict[model_name][0],
                               status=STATUS_OK)
 
-        return return_metrics
+        if return_everything:
+            return dict(model=model,
+                        train_history=history,
+                        val_performance=val_performance_dict,
+                        test_performance=test_performance_dict)
+        else:
+            return return_metrics
 
+
+    warnings.filterwarnings('ignore')
     trials = Trials()
-    best = fmin(fn=_optimize_objective,
-                space=param_grid,
-                algo=tpe.suggest,
-                max_evals=80,
-                trials=trials)
-    print('DONE\n', best)
+    #best = fmin(fn=_optimize_objective,
+    #            space=hp_param_dict,
+    #            algo=tpe.suggest,
+    #            max_evals=5,
+    #            trials=trials)
+    warnings.simplefilter('always')
 
+    # Hard code best results
+    best = {'activation_func': 2, 'backlooking_window': 0, 'first_layer_nodes': 2, 'last_layer_nodes': 1, 'n_layers': 0}
 
+    best_params = {}
+    for key, idx in best.items():
+        best_params[key] = param_grid[key][idx]
+    print('Best:', best_params)
+
+    output = _optimize_objective(best_params, return_everything=True, verbose=1)
+    print('Best:', best_params)
+    print(output)
+
+    layer_1_weights = output['model'].layers[0].weights[0].numpy()
+    print(layer_1_weights.round(3))
 
 
 
