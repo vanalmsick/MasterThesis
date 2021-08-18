@@ -6,6 +6,7 @@ import os
 import mlflow.keras
 import datetime
 import pandas as pd
+import numpy as np
 
 # Working directory must be the higher .../app folder
 if str(os.getcwd())[-3:] != 'app': raise Exception(f'Working dir must be .../app folder and not "{os.getcwd()}"')
@@ -139,6 +140,8 @@ def main_run_linear_models(train_ds, val_ds, test_ds, val_performance_dict, test
             return return_metrics
 
 
+    ######## Search for best model ########
+
     warnings.filterwarnings('ignore')
     trials = Trials()
     #best = fmin(fn=_optimize_objective,
@@ -156,12 +159,40 @@ def main_run_linear_models(train_ds, val_ds, test_ds, val_performance_dict, test
         best_params[key] = param_grid[key][idx]
     print('Best:', best_params)
 
+
+    ######## Get Best model again ########
+
+
     output = _optimize_objective(best_params, return_everything=True, verbose=1)
     print('Best:', best_params)
     print(output)
 
     layer_1_weights = output['model'].layers[0].weights[0].numpy()
     print(layer_1_weights.round(3))
+
+
+    ####### Example Plotting #######
+
+    example_X = examples['X']
+    periods = best_params['backlooking_window']
+    example_X = tf.data.Dataset.from_tensors(np.reshape(example_X[:, -periods:, :], (example_X.shape[0], -1)))
+    model = output['model']
+    examples['pred'] = {}
+    examples['pred']['TF LinearRegression'] = model.predict(example_X)
+
+    plot(examples_dict=examples, normalization=False)
+
+    # ToDo: Example Graphic normalize
+    # ToDo: Use Paper Factors only
+    # ToDo: Add LogisticRegression
+    # ToDo: Feature selection - feature importance score
+
+
+    # ToDo: Add normalize GridSearch
+    # ToDo: Add other normalization techniques
+    # ToDo: Add other parameters for GridSearch
+    # ToDo: Differnt Layer architectures
+
 
 
 

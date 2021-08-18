@@ -548,6 +548,12 @@ def mlflow_last_run_add_param(param_dict):
     if "model_name" in param_dict:
         notes = notes + f'# {param_dict["model_name"]}\n'
 
+    if "kwargs" in param_dict:
+        for key, value in param_dict['kwargs'].items():
+            param_dict[key] = value
+            mlflow_dict[key] = ['param']
+        param_dict.pop('kwargs')
+
     if "data_props" in param_dict:
         param_dict['data_dataset'] = param_dict['data_props']['first_step']['dataset']
         param_dict['data_y_col'] = param_dict['data_props']['first_step']['dataset_y_col']
@@ -555,7 +561,7 @@ def mlflow_last_run_add_param(param_dict):
         param_dict['data_window_pred_width'] = param_dict['data_props']['first_step']['window_pred_width']
         param_dict['data_split_method'] = param_dict['data_props']['second_step']['split_method']
         param_dict['data_normalize_method'] = param_dict['data_props']['second_step']['normalize_method']
-        param_dict['data_lagged_cols'] = str(param_dict['data_props']['second_step']['lagged_col_dict'])
+        #param_dict['data_lagged_cols'] = str(param_dict['data_props']['second_step']['lagged_col_dict'])
         param_dict['data_hash_first_level'] = param_dict['data_props']['first_step_data_hash']
         param_dict['data_hash_second_level'] = param_dict['data_props']['second_step_data_hash']
         param_dict['data_hash'] = param_dict['data_hash_first_level'] + '_' + param_dict['data_hash_second_level']
