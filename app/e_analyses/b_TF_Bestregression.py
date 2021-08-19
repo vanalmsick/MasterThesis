@@ -39,7 +39,7 @@ def FindLayerNodesLinear(n_layers, first_layer_nodes, last_layer_nodes):
     return layers
 
 
-def createmodel(n_layers, first_layer_nodes, last_layer_nodes, activation_func, input_size, output_size, **kwargs):
+def createmodel(n_layers, first_layer_nodes, last_layer_nodes, activation_func, input_size, output_size, compile=False, **kwargs):
     model = Sequential()
     n_nodes = FindLayerNodesLinear(n_layers, first_layer_nodes, last_layer_nodes)
     for i in range(1, n_layers):
@@ -51,19 +51,51 @@ def createmodel(n_layers, first_layer_nodes, last_layer_nodes, activation_func, 
     # Finally, the output layer should have a single node in binary classification
     model.add(Dense(output_size, activation=activation_func))
 
+    if compile:
+        model.compile(loss=tf.losses.MeanAbsoluteError(),
+                      optimizer=tf.optimizers.Adam(),
+                      metrics=[tf.metrics.MeanAbsoluteError(), tf.metrics.MeanAbsolutePercentageError(),
+                               tf.metrics.MeanSquaredLogarithmicError(), tf.metrics.MeanSquaredError()])
+
     return model
 
 
-def main_run_linear_models(train_ds, val_ds, test_ds, val_performance_dict, test_performance_dict, data_props, NN_max_depth=3, MAX_EPOCHS=800, patience=25, model_name='linear', examples=None):
+def main_run_linear_models(train_ds, val_ds, test_ds, data_props, activation_funcs=['sigmoid', 'relu', 'tanh'], max_serach_iterations=200, NN_max_depth=3, MAX_EPOCHS=800, patience=25, model_name='linear', examples=None, return_permutation_importances=True):
 
-    def _get_prep_data(train_ds, val_ds, test_ds):
+    def _get_prep_data(train_ds, val_ds, test_ds, flatten=False, keep_last_n_periods='all'):
+        # seperate tfds to np
         train_X, train_y = tf.data.experimental.get_single_element(train_ds)
-        train_y = tf.squeeze(train_y)
         val_X, val_y = tf.data.experimental.get_single_element(val_ds)
-        val_y = tf.squeeze(val_y)
         test_X, test_y = tf.data.experimental.get_single_element(test_ds)
-        test_y = tf.squeeze(test_y)
-        return (train_X, train_y), (val_X, val_y), (test_X, test_y)
+        n_train = train_X.shape[0]
+        n_val = val_X.shape[0]
+        n_test = test_X.shape[0]
+
+        if keep_last_n_periods != 'all':  # reduce periods
+            train_X = train_X[:, -keep_last_n_periods:, :]
+            val_X = val_X[:, -keep_last_n_periods:, :]
+            test_X = test_X[:, -keep_last_n_periods:, :]
+
+        if flatten:
+            train_y = tf.squeeze(train_y)
+            val_y = tf.squeeze(val_y)
+            test_y = tf.squeeze(test_y)
+            train_X = tf.reshape(train_X, (n_train, -1))
+            val_X = tf.reshape(val_X, (n_val, -1))
+            test_X = tf.reshape(test_X, (n_test, -1))
+
+
+        # Output / Return
+        out = dict(train_ds=tf.data.Dataset.from_tensors((train_X, train_y)),
+                   val_ds=tf.data.Dataset.from_tensors((val_X, val_y)),
+                   test_ds=tf.data.Dataset.from_tensors((test_X, test_y)),
+                   train_X=train_X, train_y=train_y,
+                   val_X=val_X, val_y=val_y,
+                   test_X=test_X, test_y=test_y,
+                   input_shape=train_X.shape[-1],
+                   output_shape=1 if len(set(train_y.shape)) == 1 else train_y.shape[-1])
+
+        return out
 
 
 
@@ -82,67 +114,70 @@ def main_run_linear_models(train_ds, val_ds, test_ds, val_performance_dict, test
     param_grid = dict(n_layers=list(range(1, NN_max_depth + 1)),
                       first_layer_nodes=[128, 64, 32, 16],
                       last_layer_nodes=[32, 16, 4],
-                      activation_func=['sigmoid', 'relu', 'tanh'],
+                      activation_func=activation_funcs,
                       backlooking_window=[1, 2, 3, 4])
     hp_param_dict = _hp_tranform_param_dict(param_dict=param_grid)
     hp_param_dict['model_name'] = model_name
 
 
-    def _optimize_objective(kwargs, return_everything=False, verbose=0, model_name='linear'):
+    def _optimize_objective(*args, **kwargs):
+        if args is not ():
+            kwargs = args[0]  # if positional arguments expect first to be dictionary with all kwargs
+        if type(kwargs) != dict:
+            raise Exception(f'kwargs is not  dict - it is {type(kwargs)} with values: {kwargs}')
 
-        (train_X, train_y), (val_X, val_y), (test_X, test_y) = _get_prep_data(train_ds, val_ds, test_ds)
+        backlooking_window = kwargs.pop('backlooking_window')
+        n_layers = kwargs.pop('n_layers')
+        first_layer_nodes = kwargs.pop('first_layer_nodes')
+        last_layer_nodes = kwargs.pop('last_layer_nodes')
+        activation_func = kwargs.pop('activation_func')
+        return_everything = kwargs.pop('return_everything', False)
+        verbose = kwargs.pop('verbose', 0)
+        model_name = kwargs.pop('model_name', 'linear')
+
+
+        dataset = _get_prep_data(train_ds, val_ds, test_ds, flatten=True, keep_last_n_periods=backlooking_window)
 
         now = datetime.datetime.now()
         date_time = str(now.strftime("%y%m%d%H%M%S"))
-        model_name = f"{date_time}_{model_name}_{kwargs['backlooking_window']}_{kwargs['n_layers']}"
-        periods = kwargs['backlooking_window']
+        model_name = f"{date_time}_{model_name}_{backlooking_window}_{n_layers}"
 
-        if periods == 'all':
-            tmp_train_X = tf.reshape(train_X, (train_X.shape[0], -1))
-            tmp_val_X = tf.reshape(val_X, (val_X.shape[0], -1))
-            tmp_test_X = tf.reshape(test_X, (test_X.shape[0], -1))
-        else:
-            tmp_train_X = tf.reshape(train_X[:, -periods:, :], (train_X.shape[0], -1))
-            tmp_val_X = tf.reshape(val_X[:, -periods:, :], (val_X.shape[0], -1))
-            tmp_test_X = tf.reshape(test_X[:, -periods:, :], (test_X.shape[0], -1))
-        tmp_train_ds = tf.data.Dataset.from_tensors((tmp_train_X, train_y))
-        tmp_val_ds = tf.data.Dataset.from_tensors((tmp_val_X, val_y))
-        tmp_test_ds = tf.data.Dataset.from_tensors((tmp_test_X, test_y))
 
-        kwargs['input_size'] = tmp_train_X.shape[-1]
-        kwargs['output_size'] = 1 if len(set(test_y.shape)) == 1 else train_y.shape[-1]
+        kwargs = dict(model_name=model_name,
+                      n_layers=n_layers,
+                      first_layer_nodes=first_layer_nodes,
+                      last_layer_nodes=last_layer_nodes,
+                      activation_func=activation_func,
+                      input_size=dataset['input_shape'],
+                      output_size=dataset['output_shape'],
+                      backlooking_window=backlooking_window)
 
         model = createmodel(**kwargs)
-        history, mlflow_additional_params = compile_and_fit(model=model, train=tmp_train_ds, val=tmp_val_ds,
+        history, mlflow_additional_params = compile_and_fit(model=model, train=dataset['train_ds'], val=dataset['val_ds'],
                                                             MAX_EPOCHS=MAX_EPOCHS, patience=patience, model_name=model_name,
                                                             verbose=verbose)
-        ML_kwargs = dict(kwargs)
-        try:
-            ML_kwargs.pop('batch_size')
-        except:
-            pass
-        try:
-            ML_kwargs.pop('epochs')
-        except:
-            pass
-        mlflow_additional_params['kwargs'] = ML_kwargs
 
-        val_performance_dict[model_name] = evaluate_model(model=model, tf_data=tmp_val_ds)
-        test_performance_dict[model_name] = evaluate_model(model=model, tf_data=tmp_test_ds,
-                                                           mlflow_additional_params=mlflow_additional_params)
+
+        mlflow_additional_params['kwargs'] = kwargs
+
+        train_performance = evaluate_model(model=model, tf_data=dataset['train_ds'])
+        val_performance = evaluate_model(model=model, tf_data=dataset['val_ds'])
+        test_performance = evaluate_model(model=model, tf_data=dataset['train_ds'], mlflow_additional_params=mlflow_additional_params)
 
         my_helpers.mlflow_last_run_add_param(param_dict=mlflow_additional_params)
 
         tf.keras.backend.clear_session()
 
-        return_metrics = dict(loss=val_performance_dict[model_name][0],
+        return_metrics = dict(loss=val_performance[0],
                               status=STATUS_OK)
 
         if return_everything:
             return dict(model=model,
+                        model_name=model_name,
                         train_history=history,
-                        val_performance=val_performance_dict,
-                        test_performance=test_performance_dict)
+                        train_performance=train_performance,
+                        val_performance=val_performance,
+                        test_performance=test_performance)
         else:
             return return_metrics
 
@@ -154,7 +189,7 @@ def main_run_linear_models(train_ds, val_ds, test_ds, val_performance_dict, test
     #best = fmin(fn=_optimize_objective,
     #            space=hp_param_dict,
     #            algo=tpe.suggest,
-    #            max_evals=5,
+    #            max_evals=max_serach_iterations,
     #            trials=trials)
     warnings.simplefilter('always')
 
@@ -164,55 +199,85 @@ def main_run_linear_models(train_ds, val_ds, test_ds, val_performance_dict, test
     best_params = {}
     for key, idx in best.items():
         best_params[key] = param_grid[key][idx]
-    print('Best:', best_params)
+    print('Best Model:', best_params)
 
 
     ######## Get Best model again ########
 
 
-    output = _optimize_objective(best_params, return_everything=True, verbose=1, model_name=f'best_{model_name}')
+    output = _optimize_objective(**best_params, return_everything=True, verbose=1, model_name=f'best_{model_name}')
     print('Best:', best_params)
     print(output)
 
 
+    out = dict(model_name=output['model_name'],
+               model=output['model'],
+               error={'train': output['train_performance'], 'val': output['val_performance'],
+                      'test': output['test_performance']},
+               best_model=best_params)
 
 
     ####### Example Plotting #######
 
-    example_X = examples['X']
-    periods = best_params['backlooking_window']
-    example_X = tf.data.Dataset.from_tensors(np.reshape(example_X[:, -periods:, :], (example_X.shape[0], -1)))
-    model = output['model']
-    examples['pred'] = {}
-    examples['pred']['TF LinearRegression'] = model.predict(example_X)
+    if examples is not None:
+        example_X = examples['X']
+        periods = best_params['backlooking_window']
+        example_X = tf.data.Dataset.from_tensors(np.reshape(example_X[:, -periods:, :], (example_X.shape[0], -1)))
+        model = output['model']
+        out['examples_pred_y'] = model.predict(example_X)
 
-    plot(examples_dict=examples, normalization=examples['norm_param'], y_pct=True)
 
 
     ###### P-Values if 1 level only ######
     if NN_max_depth == 1:
-        layer_1_bias_weight = output['model'].layers[0].bias.numpy()
-        layer_1_weights = output['model'].layers[0].weights[0].numpy()
-        layer_1_cols = list(data_props['look_ups']['out_lookup_col_name']['X'].keys())
-        print(layer_1_weights.round(3))
+        intercept_ = output['model'].layers[0].bias.numpy()
+        coef_ = output['model'].layers[0].weights[0].numpy()
+        coef_names_ = list(data_props['look_ups']['out_lookup_col_name']['X'].keys())
+        out['coef_'] = pd.Series(dict(zip(['intercept_'] + coef_names_, intercept_.tolist() + coef_.squeeze().tolist())))
 
-        (train_X, train_y), (val_X, val_y), (test_X, test_y) = _get_prep_data(train_ds, val_ds, test_ds)
+        dataset = _get_prep_data(train_ds, val_ds, test_ds, flatten=True, keep_last_n_periods=1)
 
-        from regressors import stats
+
+        ###### Get P Values ######
         import app.e_analyses.my_custom_pvalue_calc as my_p_lib
-        X = train_X.numpy()[:, -1, :]
-        y = np.reshape(train_y.numpy(), (-1, 1))
-        coef_ = layer_1_weights
-        intercept_ = float(layer_1_bias_weight)
-        y_pred = np.reshape(output['model'].predict(train_X[:, -1, :]), (-1, 1))
-        p_values = my_p_lib.coef_pval(X, y, coef_, intercept_, y_pred)
 
-        # print p-values
-        #print(p_values.round(3))
-        for col, p in zip(['intercept_'] + layer_1_cols, p_values.round(3).tolist()):
-            print(col, p)
+        out['p_values'] = {}
+        for data_set in ['train', 'val', 'test']:
+            y_pred = output['model'].predict(dataset[f'{data_set}_X'])
+            y_pred = np.reshape(y_pred, (-1, 1))
+            p_values = my_p_lib.coef_pval(dataset[f'{data_set}_X'], dataset[f'{data_set}_y'], coef_, intercept_, y_pred)
+            p_values = pd.Series(dict(zip(coef_names_, p_values)))
+            out['p_values'][data_set] = p_values
 
 
+
+        ##### Get Column Feature Importance #####
+        if return_permutation_importances:
+            import eli5
+            from eli5.sklearn import PermutationImportance
+
+            # Reconstruct model as Sklearn KerasRegressor model for Permutation Importance
+            best_params['input_size'] = dataset['input_shape']
+            best_params['output_size'] = dataset['output_shape']
+            best_params['compile'] = True
+            my_model = KerasRegressor(build_fn=lambda: createmodel(**best_params))
+            my_model.fit(dataset['train_X'].numpy(), np.reshape(dataset['train_y'].numpy(), (-1, 1)), verbose=0, epochs=2)
+            # Set/overwrite weights to have exactly the same model as above
+            my_model.model.layers[0].set_weights([coef_, intercept_])
+            # Validate if TF model same as new
+            y_pred = np.reshape(output['model'].predict(dataset['train_X'].numpy()), (-1, 1))
+            y_pred_validation = np.reshape(my_model.predict(dataset['train_X'].numpy()), (-1, 1))
+            if np.array_equal(y_pred, y_pred_validation) is False:
+                raise Exception('Re-fitted sklearn KerasRegressor Model for Permutation Importance is NOT IDENTICAL to TF best fit model!')
+
+            out['feature_importance'] = {}
+            for data_set in ['train', 'val', 'test']:
+                # Calculate actual FeatureImporttance
+                perm = PermutationImportance(my_model, cv='prefit').fit(dataset[f'{data_set}_X'].numpy(), np.reshape(dataset[f'{data_set}_y'].numpy(), (-1, 1)))
+                feature_importances = eli5.format_as_dataframe(eli5.explain_weights(perm, feature_names=coef_names_, top=10 ** 10))
+                out['feature_importance'][data_set] = feature_importances
+
+    return out
 
 
     # ToDo: Use Paper Factors only
@@ -279,8 +344,9 @@ if __name__ == '__main__':
                                 drop_threshold_col_pct=drop_threshold_col_pct,
                                 append_data_quality_col=append_data_quality_col)
 
-    features = ['lev_thi']
+    #features = ['lev_thi']
     features = 'all'
+
     df_to_use = feature_engerneeing(dataset=df_cleaned, comp_col=comp_col, time_cols=time_cols,
                                     industry_col=industry_col, yearly_data=yearly_data, all_features=features)
 
@@ -326,23 +392,17 @@ if __name__ == '__main__':
     data_props = data.get_data_props()
 
     train_ds, val_ds, test_ds = data.tsds_dataset(out='all', out_dict=None)
-    train_np, val_np, test_np = data.np_dataset(out='all', out_dict=None)
-    y_dataset, y_params = data.y_dataset(out='all', out_dict=None)
-    y_params['y_col'] = y_pred_col
+
     examples = data.get_examples(example_len=5, example_list=[], y_col=y_pred_col[0])
     examples['pred'] = {}
 
-    val_performance = {}
-    test_performance = {}
-    examples_predictions = main_run_linear_models(train_ds=train_ds, val_ds=val_ds, test_ds=test_ds,
-                                                  val_performance_dict=val_performance, test_performance_dict=test_performance,
-                                                  examples=examples, data_props=data_props,
-                                                  NN_max_depth=1, MAX_EPOCHS=800, patience=25, model_name='linear')
-    #examples['pred'].update(examples_predictions)
 
-    #plot(examples_dict=examples, normalization=False)
+    model_name = 'linear'
+    out = main_run_linear_models(model_name=model_name, train_ds=train_ds, val_ds=val_ds, test_ds=test_ds, examples=examples, data_props=data_props,
+                                 activation_funcs=['sigmoid', 'relu', 'tanh'], NN_max_depth=1,
+                                 max_serach_iterations=100, MAX_EPOCHS=1000, patience=50)
+    examples['pred'][model_name] = out['examples_pred_y']
 
-    #print("\n\nEvaluate on validation data:\n", '\n'.join([str(key) + ': ' + (' ' * max(0, 15-len(str(key)))) + str([round(i,2) for i in value]) for key, value in val_performance.items()]), sep='')
-    #print("\nEvaluate on test data:\n", '\n'.join([str(key) + ': ' + (' ' * max(0, 15-len(str(key)))) + str([round(i,2) for i in value]) for key, value in test_performance.items()]), sep='')
-
+    plot(examples_dict=examples, normalization=examples['norm_param'])
+    print('Test Performance:', out['error']['test'])
 

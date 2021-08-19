@@ -1,3 +1,5 @@
+import warnings
+
 import scipy
 import numpy as np
 from sklearn import metrics
@@ -48,7 +50,9 @@ def coef_pval(X, y, coef_, intercept_, y_pred):
     numpy.ndarray
         An array of p-values.
     """
+    warnings.filterwarnings('ignore')
     n = X.shape[0]
     t = coef_tval(X, y, coef_, intercept_, y_pred)
     p = 2 * (1 - scipy.stats.t.cdf(abs(t), n - 1))
+    warnings.filterwarnings('always')
     return p
