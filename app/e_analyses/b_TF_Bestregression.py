@@ -54,14 +54,17 @@ def createmodel(n_layers, first_layer_nodes, last_layer_nodes, activation_func, 
     return model
 
 
-def main_run_linear_models(train_ds, val_ds, test_ds, val_performance_dict, test_performance_dict, data_props, examples=None):
+def main_run_linear_models(train_ds, val_ds, test_ds, val_performance_dict, test_performance_dict, data_props, NN_max_depth=3, MAX_EPOCHS=800, patience=25, model_name='linear', examples=None):
 
-    train_X, train_y = tf.data.experimental.get_single_element(train_ds)
-    train_y = tf.squeeze(train_y)
-    val_X, val_y = tf.data.experimental.get_single_element(val_ds)
-    val_y = tf.squeeze(val_y)
-    test_X, test_y = tf.data.experimental.get_single_element(test_ds)
-    test_y = tf.squeeze(test_y)
+    def _get_prep_data(train_ds, val_ds, test_ds):
+        train_X, train_y = tf.data.experimental.get_single_element(train_ds)
+        train_y = tf.squeeze(train_y)
+        val_X, val_y = tf.data.experimental.get_single_element(val_ds)
+        val_y = tf.squeeze(val_y)
+        test_X, test_y = tf.data.experimental.get_single_element(test_ds)
+        test_y = tf.squeeze(test_y)
+        return (train_X, train_y), (val_X, val_y), (test_X, test_y)
+
 
 
     def _hp_tranform_param_dict(param_dict):
@@ -76,18 +79,22 @@ def main_run_linear_models(train_ds, val_ds, test_ds, val_performance_dict, test
         return new_param_dict
 
 
-    param_grid = dict(n_layers=[1, 2, 3],
+    param_grid = dict(n_layers=list(range(1, NN_max_depth + 1)),
                       first_layer_nodes=[128, 64, 32, 16],
                       last_layer_nodes=[32, 16, 4],
                       activation_func=['sigmoid', 'relu', 'tanh'],
                       backlooking_window=[1, 2, 3, 4])
     hp_param_dict = _hp_tranform_param_dict(param_dict=param_grid)
+    hp_param_dict['model_name'] = model_name
 
 
-    def _optimize_objective(kwargs, return_everything=False, verbose=0):
+    def _optimize_objective(kwargs, return_everything=False, verbose=0, model_name='linear'):
+
+        (train_X, train_y), (val_X, val_y), (test_X, test_y) = _get_prep_data(train_ds, val_ds, test_ds)
+
         now = datetime.datetime.now()
         date_time = str(now.strftime("%y%m%d%H%M%S"))
-        model_name = f"{date_time}_linear_{kwargs['backlooking_window']}_{kwargs['n_layers']}"
+        model_name = f"{date_time}_{model_name}_{kwargs['backlooking_window']}_{kwargs['n_layers']}"
         periods = kwargs['backlooking_window']
 
         if periods == 'all':
@@ -107,7 +114,7 @@ def main_run_linear_models(train_ds, val_ds, test_ds, val_performance_dict, test
 
         model = createmodel(**kwargs)
         history, mlflow_additional_params = compile_and_fit(model=model, train=tmp_train_ds, val=tmp_val_ds,
-                                                            MAX_EPOCHS=800, patience=25, model_name=model_name,
+                                                            MAX_EPOCHS=MAX_EPOCHS, patience=patience, model_name=model_name,
                                                             verbose=verbose)
         ML_kwargs = dict(kwargs)
         try:
@@ -163,12 +170,11 @@ def main_run_linear_models(train_ds, val_ds, test_ds, val_performance_dict, test
     ######## Get Best model again ########
 
 
-    output = _optimize_objective(best_params, return_everything=True, verbose=1)
+    output = _optimize_objective(best_params, return_everything=True, verbose=1, model_name=f'best_{model_name}')
     print('Best:', best_params)
     print(output)
 
-    layer_1_weights = output['model'].layers[0].weights[0].numpy()
-    print(layer_1_weights.round(3))
+
 
 
     ####### Example Plotting #######
@@ -180,14 +186,39 @@ def main_run_linear_models(train_ds, val_ds, test_ds, val_performance_dict, test
     examples['pred'] = {}
     examples['pred']['TF LinearRegression'] = model.predict(example_X)
 
-    plot(examples_dict=examples, normalization=False)
+    plot(examples_dict=examples, normalization=examples['norm_param'], y_pct=True)
 
-    # ToDo: Example Graphic normalize
+
+    ###### P-Values if 1 level only ######
+    if NN_max_depth == 1:
+        layer_1_bias_weight = output['model'].layers[0].bias.numpy()
+        layer_1_weights = output['model'].layers[0].weights[0].numpy()
+        layer_1_cols = list(data_props['look_ups']['out_lookup_col_name']['X'].keys())
+        print(layer_1_weights.round(3))
+
+        (train_X, train_y), (val_X, val_y), (test_X, test_y) = _get_prep_data(train_ds, val_ds, test_ds)
+
+        from regressors import stats
+        import app.e_analyses.my_custom_pvalue_calc as my_p_lib
+        X = train_X.numpy()[:, -1, :]
+        y = np.reshape(train_y.numpy(), (-1, 1))
+        coef_ = layer_1_weights
+        intercept_ = float(layer_1_bias_weight)
+        y_pred = np.reshape(output['model'].predict(train_X[:, -1, :]), (-1, 1))
+        p_values = my_p_lib.coef_pval(X, y, coef_, intercept_, y_pred)
+
+        # print p-values
+        #print(p_values.round(3))
+        for col, p in zip(['intercept_'] + layer_1_cols, p_values.round(3).tolist()):
+            print(col, p)
+
+
+
+
     # ToDo: Use Paper Factors only
-    # ToDo: Add LogisticRegression
+    # ToDo: Add LogisticRegression -> Linear: linear() Logit: sigmod() activation functoion
+
     # ToDo: Feature selection - feature importance score
-
-
     # ToDo: Add normalize GridSearch
     # ToDo: Add other normalization techniques
     # ToDo: Add other parameters for GridSearch
@@ -303,7 +334,10 @@ if __name__ == '__main__':
 
     val_performance = {}
     test_performance = {}
-    examples_predictions = main_run_linear_models(train_ds=train_ds, val_ds=val_ds, test_ds=test_ds, val_performance_dict=val_performance, test_performance_dict=test_performance, examples=examples, data_props=data_props)
+    examples_predictions = main_run_linear_models(train_ds=train_ds, val_ds=val_ds, test_ds=test_ds,
+                                                  val_performance_dict=val_performance, test_performance_dict=test_performance,
+                                                  examples=examples, data_props=data_props,
+                                                  NN_max_depth=1, MAX_EPOCHS=800, patience=25, model_name='linear')
     #examples['pred'].update(examples_predictions)
 
     #plot(examples_dict=examples, normalization=False)

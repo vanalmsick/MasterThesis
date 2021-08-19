@@ -1,9 +1,10 @@
-import os, sys
+import os, sys, warnings
 import pandas as pd
 import mlflow.keras
 import mlflow
 import shutil, time
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 import numpy as np
 
 # Working directory must be the higher .../app folder
@@ -18,7 +19,7 @@ from app.z_helpers import helpers as my_helpers
 
 
 
-def plot(examples_dict, normalization=True):
+def plot(examples_dict, normalization=True, y_pct=True):
 
     color_codes = ['#ff7f0e', '#58D68D', '#A569BD', '#40E0D0', '#922B21', '#CCCCFF', '#0E6655', '#1A5276']
 
@@ -49,7 +50,7 @@ def plot(examples_dict, normalization=True):
         raise Exception('Too few color codes defined. Please extend color_codes list!')
 
 
-    plt.figure(figsize=(12, 3 * examples_len))
+    fig = plt.figure(figsize=(12, 3 * examples_len))
 
     for i, time_step, comp, y_hist, y_true, t_idx, y_pred in zip(range(examples_len), time_steps, examples_comp, y_hist, y_true, t_idx, y_pred):
         x_t = [int(str(i)[:-2]) + (int(str(i)[-2:]) / 4) for i in t_idx]
@@ -87,6 +88,14 @@ def plot(examples_dict, normalization=True):
 
         #if i == examples_len - 1:
         #    plt.xticks(x_t, rotation='vertical')
+
+        if y_pct:
+            warnings.filterwarnings("ignore", message="FixedFormatter should only be used together with FixedLocator")
+            vals = fig.get_axes()[i].get_yticks()
+            fig.get_axes()[i].set_yticklabels(['{:,.2%}'.format(x) for x in vals])
+
+        fig.get_axes()[i].xaxis.set_major_locator(MaxNLocator(integer=True))
+
 
     plt.show()
 
