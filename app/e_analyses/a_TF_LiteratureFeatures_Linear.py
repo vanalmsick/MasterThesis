@@ -1,26 +1,24 @@
-import warnings
 import datetime
-import tensorflow as tf
 import os
+import warnings
+
 import mlflow.keras
-import datetime
-import pandas as pd
 import numpy as np
+import pandas as pd
+import tensorflow as tf
 
 # Working directory must be the higher .../app folder
 if str(os.getcwd())[-3:] != 'app': raise Exception(f'Working dir must be .../app folder and not "{os.getcwd()}"')
 from app.z_helpers import helpers as my_helpers
 
-from app.d_prediction.NN_tensorflow_models import compile_and_fit, evaluate_model
-from app.d_prediction.prediction import plot
-
+from app.d_prediction.NN_tensorflow_models import compile_and_fit, evaluate_model, MeanDirectionalAccuracy
 
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
-from sklearn.model_selection import GridSearchCV, RandomizedSearchCV, ParameterGrid
-from tensorflow.keras.wrappers.scikit_learn import KerasClassifier, KerasRegressor
+from tensorflow.keras.wrappers.scikit_learn import KerasRegressor
 import math
 from hyperopt import hp, fmin, tpe, STATUS_OK, Trials
+from hyperopt.early_stop import no_progress_loss
 
 
 def FindLayerNodesLinear(n_layers, first_layer_nodes, last_layer_nodes):
@@ -111,8 +109,8 @@ def main_run_linear_models(train_ds, val_ds, test_ds, data_props, activation_fun
 
 
     param_grid = dict(n_layers=list(range(1, NN_max_depth + 1)),
-                      first_layer_nodes=[128, 64, 32, 16],
-                      last_layer_nodes=[32, 16, 4],
+                      first_layer_nodes=[0] if NN_max_depth == 1 else [128, 64, 32, 16],
+                      last_layer_nodes=[0] if NN_max_depth == 1 else [32, 16, 4],
                       activation_func=activation_funcs,
                       backlooking_window=[1, 2, 3, 4])
     hp_param_dict = _hp_tranform_param_dict(param_dict=param_grid)
@@ -190,7 +188,8 @@ def main_run_linear_models(train_ds, val_ds, test_ds, data_props, activation_fun
                     space=hp_param_dict,
                     algo=tpe.suggest,
                     max_evals=max_serach_iterations,
-                    trials=trials)
+                    trials=trials,
+                    early_stop_fn=no_progress_loss(iteration_stop_count=20, percent_increase=0.05))
         warnings.simplefilter('always')
 
     else:
@@ -240,7 +239,7 @@ def main_run_linear_models(train_ds, val_ds, test_ds, data_props, activation_fun
         coef_names_ = list(data_props['look_ups']['out_lookup_col_name']['X'].keys())
         out['coef_'] = pd.Series(dict(zip(['intercept_'] + coef_names_, intercept_.tolist() + coef_.squeeze().tolist())))
 
-        dataset = _get_prep_data(train_ds, val_ds, test_ds, flatten=True, keep_last_n_periods=1)
+        dataset = _get_prep_data(train_ds, val_ds, test_ds, flatten=True, keep_last_n_periods=best_params['backlooking_window'])
 
 
         ###### Get P Values ######
@@ -389,8 +388,8 @@ if __name__ == '__main__':
     append_data_quality_col = False
 
     # feature engerneeing
-    # features = ['lev_thi']  # just lev & thi columns
-    features = 'all'  # all columns
+    features = ['lev_thi']  # just lev & thi columns
+    # features = 'all'  # all columns
 
     # y prediction column
     y_pred_col = ['y_eps pct']
@@ -470,16 +469,16 @@ if __name__ == '__main__':
     data.compute()
     print(data)
 
-    data.filter_features(just_include=['3_cap exp', '5_gross margin', '11_FIFO dummy', '8_inventory turnover', '10_inventory to assets pct', '13_depreciation', '14_div per share', '17_ROE', '18_ROE pct chg', '20_CAPEX To Assets last year', '22_debt to equity pct chg', '30_sales to assets', '31_ROA', '54_CF to debt', '57_OpIncome to assets', '2_ROA', '10_Quick Ratio', 'y_eps', 'y_eps pct', 'y_dividendyield', 'y_dividendyield pct', 'y_dividendperstock pct', 'y_EBIT pct', 'y_Net income', '1_inventory_sft_4', '3_cap exp_sft_3', '4_RnD_sft_1', '4_RnD_sft_3', '5_gross margin_sft_1', '5_gross margin_sft_3', '5_gross margin_sft_4', '6_sales admin exp_sft_1', '6_sales admin exp_sft_4', '9_order backlog_sft_1', '2_current ratio_sft_2', '2_current ratio_sft_3', '2_current ratio_sft_4', '8_inventory turnover_sft_1', '10_inventory to assets pct_sft_2', '10_inventory to assets pct_sft_4', '11_inventory_sft_1', '11_inventory_sft_2', '13_depreciation_sft_1', '13_depreciation_sft_2', '14_div per share_sft_1', '14_div per share_sft_2', '14_div per share_sft_3', '17_ROE_sft_2', '18_ROE pct chg_sft_1', '18_ROE pct chg_sft_3', '19_CAPEX To Assets_sft_2', '19_CAPEX To Assets_sft_3', '20_CAPEX To Assets last year_sft_2', '20_CAPEX To Assets last year_sft_4', '21_debt to equity_sft_3', '21_debt to equity_sft_4', '22_debt to equity pct chg_sft_4', '38_pretax income to sales_sft_1', '41_sales to total cash_sft_3', '41_sales to total cash_sft_4', '53_total assets_sft_4', '54_CF to debt_sft_2', '61_Repayment of LT debt _sft_1', '66_Cash div to cash flows_sft_1', '66_Cash div to cash flows_sft_3', '66_Cash div to cash flows_sft_4', '2_ROA_sft_1', '2_ROA_sft_3', '7_Inventory Turnover_sft_2', '7_Inventory Turnover_sft_3', '8_Asset Turnover_sft_1', '8_Asset Turnover_sft_3', '9_Current Ratio_sft_1', '9_Current Ratio_sft_2', '10_Quick Ratio_sft_2', '11_Working Capital_sft_2', '11_Working Capital_sft_3', 'y_eps_sft_1', 'y_eps_sft_2', 'y_eps_sft_3', 'y_eps_sft_4', 'y_eps pct_sft_2', 'y_eps pct_sft_4', 'y_dividendyield_sft_1', 'y_dividendyield pct_sft_1', 'y_dividendyield pct_sft_2', 'y_dividendyield pct_sft_4', 'y_dividendperstock pct_sft_2', 'y_dividendperstock pct_sft_3', 'y_EBIT pct_sft_1', 'y_EBIT pct_sft_2', 'y_Net income_sft_1', 'y_Net income_sft_2'])
+    data.filter_features(just_include=['1_Inventory', '3_CAPX', '4_RnD', '5_Gross Margin', '6_Sales & Admin. Exp.', '9_Order Backlog', '10_Labor Force', '11_FIFO/LIFO dummy'])
     data.filter_y(just_include=y_pred_col)
 
 
     ############# RUN ALL MODELS ACROSS TIME #############
 
-    run_model_acorss_time(data_obj=data, max_serach_iterations=10, MAX_EPOCHS=400, patience=25, example_len=5, example_list=[], y_col=y_pred_col[0], export_results=export_results,
-                          redo_serach_best_model=False,
-                          model_name='linear',
-                          activation_funcs=['sigmoid', 'relu', 'tanh'],
+    run_model_acorss_time(data_obj=data, max_serach_iterations=15, MAX_EPOCHS=1000, patience=25, example_len=5, example_list=[], y_col=y_pred_col[0], export_results=export_results,
+                          redo_serach_best_model=True,
+                          model_name='linear_levthi',
+                          activation_funcs=['linear'],
                           NN_max_depth=1)
 
 
@@ -488,22 +487,4 @@ if __name__ == '__main__':
 
 
 
-
-
-
-    ###### OLD - LEGACY ####
-    # out = data['200400_201900']
-    # data_props = data.get_data_props()
-    # train_ds, val_ds, test_ds = data.tsds_dataset(out='all', out_dict=None)
-
-    # examples = data.get_examples(example_len=5, example_list=[], y_col=y_pred_col[0])
-    # examples['pred'] = {}
-    # model_name = 'linear'
-    # out = main_run_linear_models(model_name=model_name, train_ds=train_ds, val_ds=val_ds, test_ds=test_ds, examples=examples, data_props=data_props,
-    #                              activation_funcs=['sigmoid', 'relu', 'tanh'], NN_max_depth=1,
-    #                              max_serach_iterations=100, MAX_EPOCHS=1000, patience=50)
-    # examples['pred'][model_name] = out['examples_pred_y']
-
-    # plot(examples_dict=examples, normalization=examples['norm_param'])
-    # print('Test Performance:', out['error']['test'])
 
