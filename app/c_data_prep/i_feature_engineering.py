@@ -14,7 +14,7 @@ def get_pct_change(df, time_cols=['period_year', 'period_qrt'], company_cols=['g
     df_cp = df.copy()
     df_cp = df_cp.set_index(company_cols + time_cols)
     df_cp = df_cp.sort_index()
-    df_cp = df_cp.select_dtypes(np.number).groupby(level=company_cols).pct_change()
+    df_cp = df_cp.select_dtypes(np.number).groupby(level=company_cols).pct_change() * 100
     if reset_index:
         df_cp = df_cp.reset_index()
     return df_cp.fillna(0)
@@ -59,21 +59,19 @@ def compare_against_industry(df_comps, df_industry, time_cols, company_col, indu
 
 def lev_thiagaranjan_signs(df_abs, df_pct, iter_col, company_col):
     new_df = df_pct[[company_col] + iter_col].copy()
-    new_df['1_inventory'] = df_pct['inventory'].fillna(0) - df_pct['sales']
+    new_df['1_Inventory'] = df_pct['inventory'].fillna(0) - df_pct['sales']
     #new_df['2_accounts receivals'] = df_pct['receivablesandloanstotal'] - df_pct['sales']
-    new_df['3_cap exp'] = df_pct['capitalexpenditures_avg'] - df_pct['capitalexpenditures']
+    new_df['3_CAPX'] = df_pct['capitalexpenditures_avg'] - df_pct['capitalexpenditures']
     new_df['4_RnD'] = df_pct['randd_avg'] - df_pct['randd']
-    new_df['5_gross margin'] = df_pct['sales'] - df_pct['grossmargin']
-    new_df['6_sales admin exp'] = df_pct['sga'] - df_pct['sales']
+    new_df['5_Gross Margin'] = df_pct['sales'] - df_pct['grossmargin']
+    new_df['6_Sales & Admin. Exp.'] = df_pct['sga'] - df_pct['sales']
     # ToDo: Prov doubt accounts no/little data
     #new_df['7_prov doubt rec'] = df_pct['receivables'] - df_pct['provdoubtacct']
     # ToDo: 8_eff tax: df['tr_f_ebit'] tr_f_inctaxratepct
-    new_df['9_order backlog'] = df_pct['sales'] - df_pct['orderbacklog'].fillna(0)
-    new_df['10_labor force'] = ((df_abs['sales_sft_1'] / df_abs['employeenum_sft_1']) - (df_abs['sales'] / df_abs['employeenum'])) / df_abs['sales_sft_1'] / df_abs['employeenum_sft_1']
-    new_df.loc[df_abs['fifovslifo'] < 0, '11_FIFO dummy'] = 1
-    new_df['11_FIFO dummy'].fillna(0, inplace=True)
-    new_df.loc[df_abs['fifovslifo'] > 0, '11_LIFO dummy'] = 1
-    new_df['11_LIFO dummy'].fillna(0, inplace=True)
+    new_df['9_Order Backlog'] = df_pct['sales'] - df_pct['orderbacklog'].fillna(0)
+    new_df['10_Labor Force'] = ((df_abs['sales_sft_1'] / df_abs['employeenum_sft_1']) - (df_abs['sales'] / df_abs['employeenum'])) / df_abs['sales_sft_1'] / df_abs['employeenum_sft_1']
+    new_df.loc[df_abs['fifovslifo'] < 0, '11_FIFO/LIFO dummy'] = 1
+    new_df['11_FIFO/LIFO dummy'].fillna(0, inplace=True)
     # ToDo: 12_Audit dummy
 
     return new_df
@@ -280,7 +278,7 @@ def feature_engerneeing(dataset, comp_col, time_cols, industry_col, all_features
     df_all = _lagged_variables(df_all, lagged_dict={'__all__': [1, 2, 3, 4]}, comp_col=[comp_col],
                            time_cols=time_cols, exclude_cols=[industry_col, 'sector', 'exchangename', 'headquarterscountry', 'analystrecom'])
 
-    df_all = df_all.replace(['inf', 'nan', '-inf', np.inf, -np.inf, np.nan], np.nan)
+    df_all = df_all.replace(['inf', 'nan', '-inf', np.inf, -np.inf, np.nan], 0)
 
     # ToDo: What do in the end if NaN after feature engerneeing? drop or fill?
     df_all = df_all.dropna()
@@ -302,9 +300,9 @@ def feature_engerneeing(dataset, comp_col, time_cols, industry_col, all_features
         if col in cols:
             cols.remove(col)
     df_z_check = df_all[cols]
-    keep_rows = (np.abs(stats.zscore(df_z_check.replace(['inf', 'nan', np.inf, -np.inf, np.nan], 0))) < 3).all(axis=1)
+    #keep_rows = (np.abs(stats.zscore(df_z_check.replace(['inf', 'nan', np.inf, -np.inf, np.nan], 0))) < 3).all(axis=1)
 
-    df_all = df_all[keep_rows]
+    #df_all = df_all[keep_rows]
 
     return df_all
 

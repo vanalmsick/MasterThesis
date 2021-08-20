@@ -475,11 +475,11 @@ if __name__ == '__main__':
 
     ############# RUN ALL MODELS ACROSS TIME #############
 
-    run_model_acorss_time(data_obj=data, max_serach_iterations=15, MAX_EPOCHS=1000, patience=25, example_len=5, example_list=[], y_col=y_pred_col[0], export_results=export_results,
+    run_model_acorss_time(data_obj=data, max_serach_iterations=100, MAX_EPOCHS=1000, patience=25, example_len=5, example_list=[], y_col=y_pred_col[0], export_results=export_results,
                           redo_serach_best_model=True,
-                          model_name='linear_levthi_linear',
-                          activation_funcs=['linear'],
-                          NN_max_depth=1)
+                          model_name='linear_levthi_best',
+                          activation_funcs=['linear', 'sigmoid', 'tanh', 'relu', 'elu', 'selu'],
+                          NN_max_depth=4)
 
 
     ######################################################

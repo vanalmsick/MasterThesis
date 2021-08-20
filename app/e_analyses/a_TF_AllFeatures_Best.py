@@ -388,8 +388,8 @@ if __name__ == '__main__':
     append_data_quality_col = False
 
     # feature engerneeing
-    features = ['lev_thi']  # just lev & thi columns
-    # features = 'all'  # all columns
+    # features = ['lev_thi']  # just lev & thi columns
+    features = 'all'  # all columns
 
     # y prediction column
     y_pred_col = ['y_eps pct']
@@ -469,17 +469,17 @@ if __name__ == '__main__':
     data.compute()
     print(data)
 
-    data.filter_features(just_include=['1_Inventory', '3_CAPX', '4_RnD', '5_Gross Margin', '6_Sales & Admin. Exp.', '9_Order Backlog', '10_Labor Force', '11_FIFO/LIFO dummy'] + y_pred_col)
+    #data.filter_features(just_include=['1_Inventory', '3_CAPX', '4_RnD', '5_Gross Margin', '6_Sales & Admin. Exp.', '9_Order Backlog', '10_Labor Force', '11_FIFO/LIFO dummy'])
     data.filter_y(just_include=y_pred_col)
 
 
     ############# RUN ALL MODELS ACROSS TIME #############
 
-    run_model_acorss_time(data_obj=data, max_serach_iterations=15, MAX_EPOCHS=1000, patience=25, example_len=5, example_list=[], y_col=y_pred_col[0], export_results=export_results,
+    run_model_acorss_time(data_obj=data, max_serach_iterations=100, MAX_EPOCHS=1000, patience=25, example_len=5, example_list=[], y_col=y_pred_col[0], export_results=export_results,
                           redo_serach_best_model=True,
-                          model_name='linear_levthi_linear',
-                          activation_funcs=['linear'],
-                          NN_max_depth=1)
+                          model_name='linear_all_best',
+                          activation_funcs=['linear', 'sigmoid', 'tanh', 'relu', 'elu', 'selu'],
+                          NN_max_depth=4)
 
 
     ######################################################

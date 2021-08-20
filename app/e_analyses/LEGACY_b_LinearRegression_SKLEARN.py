@@ -7,6 +7,53 @@ from sklearn.linear_model import LinearRegression
 #import eli5
 #from eli5.sklearn import PermutationImportance
 
+
+from sklearn.pipeline import Pipeline, TransformerMixin
+from sklearn.neighbors import LocalOutlierFactor
+
+
+class OutlierExtractor(TransformerMixin):
+    def __init__(self, **kwargs):
+        """
+        Create a transformer to remove outliers. A threshold is set for selection
+        criteria, and further arguments are passed to the LocalOutlierFactor class
+
+        Keyword Args:
+            neg_conf_val (float): The threshold for excluding samples with a lower
+               negative outlier factor.
+
+        Returns:
+            object: to be used as a transformer method as part of Pipeline()
+        """
+
+        self.threshold = kwargs.pop('neg_conf_val', -10.0)
+
+        self.kwargs = kwargs
+
+    def transform(self, X, y):
+        """
+        Uses LocalOutlierFactor class to subselect data based on some threshold
+
+        Returns:
+            ndarray: subsampled data
+
+        Notes:
+            X should be of shape (n_samples, n_features)
+        """
+        X = np.asarray(X)
+        y = np.asarray(y)
+        lcf = LocalOutlierFactor(**self.kwargs)
+        lcf.fit(X)
+        return (X[lcf.negative_outlier_factor_ > self.threshold, :],
+                y[lcf.negative_outlier_factor_ > self.threshold])
+
+    def fit(self, *args, **kwargs):
+        return self
+
+
+
+
+
 if __name__ == '__main__':  # must be in if condition because I am pusing parallel processing
     # Working directory must be the higher .../app folder
     from app.z_helpers import helpers as my
@@ -225,11 +272,19 @@ if __name__ == '__main__':  # must be in if condition because I am pusing parall
         from sklearn.pipeline import Pipeline
         from sklearn.model_selection import GridSearchCV #, HalvingGridSearchCV
         from sklearn.feature_selection import RFE
-        from sklearn.metrics import accuracy_score, mean_absolute_error
+        from sklearn.metrics import accuracy_score, mean_absolute_error, r2_score, make_scorer
+
+
+
+
+        def R2(y_true, y_pred):
+            r2 = r2_score(y_true, y_pred)
+            return r2
 
         jobs = -1
 
-        params = {'scaler': {'Scaler': {'with_mean': [True, False]},
+        params = {'outliers': {'neg_conf_val': [-10.0, -7.0, -5.0]},
+                  'scaler': {'Scaler': {'with_mean': [True, False]},
                              'RobustScaler': {'with_centering': [True, False]}},
                   'regression': {'MultiTaskElasticNetCV': {'cv': [3]}},
                   'feature_selection': {'RFE': {'n_features_to_select': [7, 10, 12]}}}
@@ -253,12 +308,14 @@ if __name__ == '__main__':  # must be in if condition because I am pusing parall
                         if regression_name in params['regression']:
                             regression_dict = dict(zip([regression_name + '__' + key for key in list(params['regression'][regression_name].keys())], list(params['regression'][regression_name].values())))
                             param_grid.update(regression_dict)
+                        #outlier_dict = dict(zip(['outliers' + '__' + key for key in list(params['outliers'].keys())], list(params['outliers'].values())))
+                        #param_grid.update(outlier_dict)
 
 
-
+                        my_scorer = make_scorer(R2, greater_is_better=True)
                         grid = GridSearchCV(estimator=pipe,
                                             param_grid=[param_grid],
-                                            scoring='neg_mean_absolute_error',
+                                            scoring=my_scorer,
                                             cv=3,
                                             n_jobs=jobs)
 
@@ -275,7 +332,7 @@ if __name__ == '__main__':  # must be in if condition because I am pusing parall
         best_gs = ''
         best_cols = []
         best_scaler = 0
-        best_clf = 0
+        best_clf_obj = 0
         for grid_name, grid in grids.items():
             print('\nEstimator: %s' % grid_name)
             # Fit grid search
@@ -290,7 +347,7 @@ if __name__ == '__main__':  # must be in if condition because I am pusing parall
             # Predict on test data with best params
             y_pred = grid.predict(oos_X)
             # Test data accuracy of model with best params
-            error = -mean_absolute_error(oos_y, y_pred.reshape((-1,1)))
+            error = r2_score(oos_y, y_pred.reshape((-1,1)))
             print('Test set accuracy score for best params: %.3f ' % error)
             # Track best (highest test accuracy) model
             if error > best_acc:
@@ -299,7 +356,7 @@ if __name__ == '__main__':  # must be in if condition because I am pusing parall
                 best_clf = grid_name
                 best_cols = relevant_cols
                 best_scaler = grid.best_estimator_.steps[0][1]
-                best_clf = grid.best_estimator_.steps[-1][1]
+                best_clf_obj = grid.best_estimator_.steps[-1][1]
 
         print('\nClassifier with best test set accuracy: %s' % best_clf)
         tmp_scaler_X = best_scaler.fit(train_X)
@@ -307,9 +364,9 @@ if __name__ == '__main__':  # must be in if condition because I am pusing parall
         tmp_scaler_y = best_scaler.fit(train_y.reshape((-1, 1)))
         tmp_oos_y = tmp_scaler_y.transform(oos_y.reshape((-1, 1)))
 
-        print('Train R:', best_clf.score(tmp_oos_X, tmp_oos_y))
-        print('OOS R:', best_clf.score(tmp_oos_X, tmp_oos_y))
-        stats.summary(best_clf, tmp_oos_X, tmp_oos_y, tmp_oos_X.columns.tolist())
+        print('Train R:', best_clf_obj.score(tmp_oos_X, tmp_oos_y))
+        print('OOS R:', best_clf_obj.score(tmp_oos_X, tmp_oos_y))
+        stats.summary(best_clf_obj, tmp_oos_X, tmp_oos_y, tmp_oos_X.columns.tolist())
 
         with open('best_linear_model.txt', 'a') as f:
             f.write(f'Best model: {best_clf}\n')
