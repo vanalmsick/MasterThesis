@@ -398,7 +398,8 @@ if __name__ == '__main__':
     backlooking_yeras = 4
 
     # results location
-    export_results = '/Users/vanalmsick/Workspace/MasterThesis/output/'
+    export_results = False
+    # export_results = '/Users/vanalmsick/Workspace/MasterThesis/output/'
 
 
     ###########################################################################

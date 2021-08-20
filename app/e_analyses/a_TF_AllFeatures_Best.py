@@ -21,6 +21,27 @@ from hyperopt import hp, fmin, tpe, STATUS_OK, Trials
 from hyperopt.early_stop import no_progress_loss
 
 
+def just_good_features(train_X, train_y=None):
+    # drop columns and levae one with high correlation
+    corr_matrix = train_X.corr()
+    corr_matrix.replace([np.nan, np.inf, -np.inf], 0, inplace=True)
+
+    columns = np.full((corr_matrix.shape[0],), True, dtype=bool)
+    for i in range(corr_matrix.shape[0]):
+        for j in range(i + 1, corr_matrix.shape[0]):
+            if corr_matrix.iloc[i, j] >= 0.9:
+                if columns[j]:
+                    columns[j] = False
+
+    columns = corr_matrix.index[columns].to_list()
+
+    return columns
+
+
+
+
+
+
 def FindLayerNodesLinear(n_layers, first_layer_nodes, last_layer_nodes):
     layers = []
 
@@ -398,7 +419,8 @@ if __name__ == '__main__':
     backlooking_yeras = 4
 
     # results location
-    export_results = '/Users/vanalmsick/Workspace/MasterThesis/output/'
+    export_results = False
+    #export_results = '/Users/vanalmsick/Workspace/MasterThesis/output/'
 
 
     ###########################################################################
@@ -469,11 +491,21 @@ if __name__ == '__main__':
     data.compute()
     print(data)
 
-    #data.filter_features(just_include=['1_Inventory', '3_CAPX', '4_RnD', '5_Gross Margin', '6_Sales & Admin. Exp.', '9_Order Backlog', '10_Labor Force', '11_FIFO/LIFO dummy'])
     data.filter_y(just_include=y_pred_col)
 
 
     ############# RUN ALL MODELS ACROSS TIME #############
+
+    out = data['200300_201800']
+    col_finding_data = data.df_dataset(out_dict=out)[0]
+
+    filter_cols = col_finding_data[0].columns.tolist()  # all columns
+    #filter_cols = just_good_features(*col_finding_data)
+    print(f'Reduced columns to {len(filter_cols)} (because of high corr / VIF / very low variance):', filter_cols)
+
+    data.filter_features(just_include=filter_cols)
+
+
 
     run_model_acorss_time(data_obj=data, max_serach_iterations=100, MAX_EPOCHS=1000, patience=25, example_len=5, example_list=[], y_col=y_pred_col[0], export_results=export_results,
                           redo_serach_best_model=True,

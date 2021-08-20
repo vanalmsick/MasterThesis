@@ -236,7 +236,7 @@ def _lagged_variables(df, lagged_dict={'__all__': [1, 2, 3, 4]}, comp_col=['ric'
 
 
 
-def feature_engerneeing(dataset, comp_col, time_cols, industry_col, all_features='all', yearly_data=False):
+def feature_engerneeing(dataset, comp_col, time_cols, industry_col, all_features='all', yearly_data=False, NonTFlaggedfeatures=False):
 
     df = dataset
 
@@ -275,8 +275,9 @@ def feature_engerneeing(dataset, comp_col, time_cols, industry_col, all_features
 
     df_all = merge_df(index_cols=time_cols + [comp_col], merge_dfs=dfs)
 
-    df_all = _lagged_variables(df_all, lagged_dict={'__all__': [1, 2, 3, 4]}, comp_col=[comp_col],
-                           time_cols=time_cols, exclude_cols=[industry_col, 'sector', 'exchangename', 'headquarterscountry', 'analystrecom'])
+    if NonTFlaggedfeatures:  # If not using TesorFlow lagged variables need to be added maually
+        df_all = _lagged_variables(df_all, lagged_dict={'__all__': [2, 4]}, comp_col=[comp_col],
+                                   time_cols=time_cols, exclude_cols=[industry_col, 'sector', 'exchangename', 'headquarterscountry', 'analystrecom'])
 
     df_all = df_all.replace(['inf', 'nan', '-inf', np.inf, -np.inf, np.nan], 0)
 
