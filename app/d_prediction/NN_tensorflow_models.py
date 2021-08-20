@@ -9,6 +9,20 @@ if str(os.getcwd())[-3:] != 'app': raise Exception(f'Working dir must be .../app
 from app.z_helpers import helpers as my_helpers
 
 
+import keras
+
+
+class CustomMeanDirectionalAccuracy(keras.losses.Loss):
+    def __init__(self, regularization_factor=0.1, name="mean_directional_accuracy"):
+        super().__init__(name=name)
+        self.regularization_factor = regularization_factor
+
+    def call(self, y_true, y_pred):
+        mda = tf.math.reduce_mean(tf.cast((tf.math.sign(y_true)) == tf.math.sign(y_pred), dtype=tf.float32))
+        return mda
+
+
+
 
 
 def compile_and_fit(model, train, val, model_name='UNKNOWN', patience=25, MAX_EPOCHS=50, verbose=1):
