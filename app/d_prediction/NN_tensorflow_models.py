@@ -11,7 +11,7 @@ from app.z_helpers import helpers as my_helpers
 
 
 
-def compile_and_fit(model, train, val, model_name='UNKNOWN', patience=25, MAX_EPOCHS=50):
+def compile_and_fit(model, train, val, model_name='UNKNOWN', patience=25, MAX_EPOCHS=50, verbose=1):
     tracking_address = my_helpers.get_project_directories(key='tensorboard_logs')
     TBLOGDIR = tracking_address + "/" + model_name
 
@@ -30,13 +30,13 @@ def compile_and_fit(model, train, val, model_name='UNKNOWN', patience=25, MAX_EP
                                                           patience=patience,
                                                           mode='min',
                                                           restore_best_weights=True)
-        training_history = model.fit(train, epochs=MAX_EPOCHS, validation_data=val, callbacks=[early_stopping, tensorboard_callback])
+        training_history = model.fit(train, epochs=MAX_EPOCHS, validation_data=val, callbacks=[early_stopping, tensorboard_callback], verbose=verbose)
     else:
         early_stopping = tf.keras.callbacks.EarlyStopping(monitor='loss',
                                                           patience=patience,
                                                           mode='min',
                                                           restore_best_weights=True)
-        training_history = model.fit(train, epochs=MAX_EPOCHS, callbacks=[early_stopping, tensorboard_callback])
+        training_history = model.fit(train, epochs=MAX_EPOCHS, callbacks=[early_stopping, tensorboard_callback], verbose=verbose)
 
     summary_table = pd.DataFrame(columns=["Layer (Type)", "Input Shape", "Output Shape", "Param #", "Dropout", "Bias initializer", "Bias regularizer"])
     for layer in model.layers:
@@ -49,8 +49,9 @@ def compile_and_fit(model, train, val, model_name='UNKNOWN', patience=25, MAX_EP
                                 'early_stopped': model.stop_training,
                                 'loss': model.loss.name}
 
-    print(model_name)
-    print(model.summary())
+    if verbose != 0:
+        print(model_name)
+        print(model.summary())
 
     return training_history, mlflow_additional_params
 
