@@ -19,6 +19,38 @@ from app.z_helpers import helpers as my_helpers
 
 
 
+def error_overview(y_pred, y_true):
+    from scipy import stats
+    data = np.array(y_pred).squeeze() - np.array(y_true).squeeze()
+    out = [[('-inf', -2), stats.percentileofscore(data, -2)],
+           [(-2,-1.5), stats.percentileofscore(data, -1.5) - stats.percentileofscore(data, -2)],
+           [(-1.5,-1), stats.percentileofscore(data, -1) - stats.percentileofscore(data, -1.5)],
+           [(-1,-0.5), stats.percentileofscore(data, -0.5) - stats.percentileofscore(data, -1)],
+           [(-0.5,-0.25), stats.percentileofscore(data, -0.25) - stats.percentileofscore(data, -0.5)],
+           [(-0.25,-0.15), stats.percentileofscore(data, -0.15) - stats.percentileofscore(data, -0.25)],
+           [(-0.15,-0.10), stats.percentileofscore(data, -0.10) - stats.percentileofscore(data, -0.15)],
+           [(-0.10,-0.05), stats.percentileofscore(data, -0.05) - stats.percentileofscore(data, -0.10)],
+           [(-0.05,-0.025), stats.percentileofscore(data, -0.025) - stats.percentileofscore(data, -0.05)],
+           [(-0.025,-0.01), stats.percentileofscore(data, -0.01) - stats.percentileofscore(data, -0.025)],
+           [(-0.01,0), stats.percentileofscore(data, 0) - stats.percentileofscore(data, -0.01)],
+           [(0,0.01), stats.percentileofscore(data, 0.01) - stats.percentileofscore(data, 0)],
+           [(0.01,0.025), stats.percentileofscore(data, 0.025) - stats.percentileofscore(data, 0.01)],
+           [(0.025,0.05), stats.percentileofscore(data, 0.05) - stats.percentileofscore(data, 0.025)],
+           [(0.05,0.1), stats.percentileofscore(data, 0.1) - stats.percentileofscore(data, 0.05)],
+           [(0.10,0.15), stats.percentileofscore(data, 0.15) - stats.percentileofscore(data, 0.10)],
+           [(0.15,0.25), stats.percentileofscore(data, 0.25) - stats.percentileofscore(data, 0.15)],
+           [(0.25,0.5), stats.percentileofscore(data, 0.5) - stats.percentileofscore(data, 0.25)],
+           [(0.5,1), stats.percentileofscore(data, 1) - stats.percentileofscore(data, 0.5)],
+           [(1,1.5), stats.percentileofscore(data, 1.5) - stats.percentileofscore(data, 1)],
+           [(1.5,2), stats.percentileofscore(data, 2) - stats.percentileofscore(data, 1.5)],
+           [(2, 'inf'), 1 - stats.percentileofscore(data, 2)]]
+    out = np.array(out).T
+
+
+
+
+
+
 def plot(examples_dict, normalization=True, y_pct=True):
 
     color_codes = ['#ff7f0e', '#58D68D', '#A569BD', '#40E0D0', '#922B21', '#CCCCFF', '#0E6655', '#1A5276']
