@@ -58,7 +58,7 @@ if __name__ == '__main__':
 
     # results location
     export_results = False
-    #export_results = '/Users/vanalmsick/Workspace/MasterThesis/output/'
+    # export_results = '/Users/vanalmsick/Workspace/MasterThesis/output/'
 
     model_name = 'dense_lit_best'
 

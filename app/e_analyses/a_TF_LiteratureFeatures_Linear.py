@@ -137,10 +137,11 @@ if __name__ == '__main__':
 
     ############# RUN ALL MODELS ACROSS TIME #############
 
-    run_model_acorss_time(data_obj=data, max_serach_iterations=25, MAX_EPOCHS=1000, patience=25, example_len=5, example_list=[], y_col=y_pred_col[0], export_results=export_results,
+    run_model_acorss_time(data_obj=data, max_serach_iterations= 4 * 4, MAX_EPOCHS=1000, patience=8, example_len=5, example_list=[], y_col=y_pred_col[0], export_results=export_results,
                           redo_serach_best_model=False,
                           model_name=model_name,
                           activation_funcs=['linear'],
+                          max_backlooking=1,
                           NN_max_depth=1)
 
 

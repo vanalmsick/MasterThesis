@@ -76,7 +76,7 @@ def createmodel(n_layers, first_layer_nodes, last_layer_nodes, activation_func, 
     return model
 
 
-def main_run_linear_models(train_ds, val_ds, test_ds, data_props, activation_funcs=['sigmoid', 'relu', 'tanh'], max_serach_iterations=200, NN_max_depth=3, MAX_EPOCHS=800, patience=25, model_name='linear', examples=None, return_permutation_importances=True, redo_serach_best_model=False):
+def main_run_linear_models(train_ds, val_ds, test_ds, data_props, max_backlooking=None, activation_funcs=['sigmoid', 'relu', 'tanh'], max_serach_iterations=200, NN_max_depth=3, MAX_EPOCHS=800, patience=25, model_name='linear', examples=None, return_permutation_importances=True, redo_serach_best_model=False):
     mlflow.set_experiment(model_name)
     experiment_date_time = int(datetime.datetime.now().strftime("%Y%m%d%H%M%S"))
 
@@ -149,12 +149,13 @@ def main_run_linear_models(train_ds, val_ds, test_ds, data_props, activation_fun
                 new_param_dict[key] = value
         return new_param_dict
 
+    max_backlooking = data_props['first_step']['window_input_width'] if max_backlooking is None else max_backlooking
 
     param_grid = dict(n_layers=list(range(1, NN_max_depth + 1)),
                       first_layer_nodes=[0] if NN_max_depth == 1 else [128, 64, 32, 16, 8],
                       last_layer_nodes=[0] if NN_max_depth == 1 else [64, 32, 16, 8, 4],
                       activation_func=activation_funcs,
-                      backlooking_window=[1, 2, 3, 4])
+                      backlooking_window=list(range(1, max_backlooking + 1)))
     hp_param_dict = _hp_tranform_param_dict(param_dict=param_grid)
     hp_param_dict['model_name'] = model_name
     hp_param_dict['data_props'] = data_props
@@ -387,7 +388,7 @@ def main_run_linear_models(train_ds, val_ds, test_ds, data_props, activation_fun
 
 
 
-def run_model_acorss_time(data_obj, model_name, activation_funcs, y_col, max_serach_iterations=200, redo_serach_best_model=False, NN_max_depth=3, MAX_EPOCHS=800, patience=25, example_len=5, example_list=[], export_results=False):
+def run_model_acorss_time(data_obj, model_name, activation_funcs, y_col, max_serach_iterations=200, redo_serach_best_model=False, max_backlooking=None, NN_max_depth=3, MAX_EPOCHS=800, patience=25, example_len=5, example_list=[], export_results=False):
 
     results_storage = {}
 
@@ -405,7 +406,7 @@ def run_model_acorss_time(data_obj, model_name, activation_funcs, y_col, max_ser
         examples['pred'] = {}
         data_props = data_obj.get_data_props()
 
-        results = main_run_linear_models(train_ds, val_ds, test_ds, data_props, activation_funcs=activation_funcs, max_serach_iterations=max_serach_iterations, NN_max_depth=NN_max_depth, MAX_EPOCHS=MAX_EPOCHS, patience=patience, model_name=model_name, examples=examples, redo_serach_best_model=redo_serach_best_model, return_permutation_importances=True)
+        results = main_run_linear_models(train_ds, val_ds, test_ds, data_props, max_backlooking=max_backlooking, activation_funcs=activation_funcs, max_serach_iterations=max_serach_iterations, NN_max_depth=NN_max_depth, MAX_EPOCHS=MAX_EPOCHS, patience=patience, model_name=model_name, examples=examples, redo_serach_best_model=redo_serach_best_model, return_permutation_importances=True)
         if results['status'] == 'ok':
             examples['pred'][model_name] = results['examples_pred_y']
 
