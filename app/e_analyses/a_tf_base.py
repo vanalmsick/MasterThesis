@@ -205,7 +205,7 @@ def main_run_linear_models(train_ds, val_ds, test_ds, data_props, activation_fun
 
         train_performance = dict(zip(model.metrics_names, evaluate_model(model=model, tf_data=dataset['train_ds'])))
         val_performance = dict(zip(model.metrics_names, evaluate_model(model=model, tf_data=dataset['val_ds'])))
-        test_performance = dict(zip(model.metrics_names, evaluate_model(model=model, tf_data=dataset['train_ds'], mlflow_additional_params=mlflow_additional_params)))
+        test_performance = dict(zip(model.metrics_names, evaluate_model(model=model, tf_data=dataset['test_ds'], mlflow_additional_params=mlflow_additional_params)))
 
         # Only save model if close to 15% best models
         try:
@@ -251,7 +251,7 @@ def main_run_linear_models(train_ds, val_ds, test_ds, data_props, activation_fun
                     algo=tpe.suggest,
                     max_evals=max_serach_iterations,
                     trials=trials,
-                    early_stop_fn=no_progress_loss(iteration_stop_count=20, percent_increase=0.05))
+                    early_stop_fn=no_progress_loss(iteration_stop_count=int(max_serach_iterations/4), percent_increase=0.025))
         warnings.simplefilter('always')
 
         # getting all parameters for best model storage
