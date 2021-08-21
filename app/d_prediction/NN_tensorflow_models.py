@@ -37,7 +37,7 @@ def compile_and_fit(model, train, val, model_name='UNKNOWN', patience=25, MAX_EP
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=TBLOGDIR, histogram_freq=1)
     model.compile(loss=tf.losses.MeanAbsoluteError(),
                   optimizer=tf.optimizers.Adam(),
-                  metrics=[tf.metrics.MeanAbsoluteError(), tf.metrics.MeanAbsolutePercentageError(), tf.metrics.MeanSquaredLogarithmicError(), tf.metrics.MeanSquaredError()])
+                  metrics=[tf.metrics.MeanAbsoluteError(), CustomMeanDirectionalAccuracy(), tf.losses.Huber(), tf.metrics.MeanAbsolutePercentageError(), tf.metrics.MeanSquaredError(), tf.metrics.MeanSquaredLogarithmicError()])
 
     if val is not None:
         early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
@@ -57,6 +57,8 @@ def compile_and_fit(model, train, val, model_name='UNKNOWN', patience=25, MAX_EP
         summary_table = summary_table.append({"Layer (Type)": layer.name + '(' + layer.__class__.__name__ + ')', "Input Shape": layer.input_shape, "Output Shape": layer.output_shape, "Param #": layer.count_params(), "Dropout": layer.dropout if hasattr(layer, 'dropout') else 'nan', "Bias initializer": layer.bias_initializer._tf_api_names if hasattr(layer, 'bias_initializer') and hasattr(layer.bias_initializer, '_tf_api_names') else 'nan', "Bias regularizer": layer.bias_regularizer if hasattr(layer, 'bias_regularizer') else 'nan'}, ignore_index=True)
 
     mlflow_additional_params = {'layer_df': summary_table,
+                                'model_type': 'TensorFlow',
+                                'history_obj': training_history,
                                 'model_name': model_name,
                                 'max_epochs': early_stopping.params['epochs'],
                                 'actual_epochs': early_stopping.stopped_epoch,

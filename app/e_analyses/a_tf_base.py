@@ -6,6 +6,7 @@ import mlflow.keras
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+import json
 
 # Working directory must be the higher .../app folder
 if str(os.getcwd())[-3:] != 'app': raise Exception(f'Working dir must be .../app folder and not "{os.getcwd()}"')
@@ -57,7 +58,7 @@ def FindLayerNodesLinear(n_layers, first_layer_nodes, last_layer_nodes):
     return layers
 
 
-def createmodel(n_layers, first_layer_nodes, last_layer_nodes, activation_func, input_size, output_size, compile=False, **kwargs):
+def createmodel(n_layers, first_layer_nodes, last_layer_nodes, activation_func, input_size, output_size, compile=False, model_name=None, **kwargs):
     model = Sequential()
     n_nodes = FindLayerNodesLinear(n_layers, first_layer_nodes, last_layer_nodes)
     for i in range(1, n_layers):
@@ -76,6 +77,29 @@ def createmodel(n_layers, first_layer_nodes, last_layer_nodes, activation_func, 
 
 
 def main_run_linear_models(train_ds, val_ds, test_ds, data_props, activation_funcs=['sigmoid', 'relu', 'tanh'], max_serach_iterations=200, NN_max_depth=3, MAX_EPOCHS=800, patience=25, model_name='linear', examples=None, return_permutation_importances=True, redo_serach_best_model=False):
+    mlflow.set_experiment(model_name)
+    experiment_date_time = int(datetime.datetime.now().strftime("%Y%m%d%H%M%S"))
+
+
+    def _extract_just_important_data_props(data_props):
+        kwargs = {}
+        kwargs['dataset_cols_X_just_these'] = data_props['third_filter']['cols_just_these']
+        kwargs['dataset_cols_X_exclude'] = data_props['third_filter']['cols_drop']
+        kwargs['dataset_cols_y'] = data_props['third_filter']['y_cols_just_these']
+        kwargs['dataset_hash_input'] = int(data_props['first_step']['dataset'])
+        kwargs['dataset_hash_first'] = data_props['first_step_data_hash']
+        kwargs['dataset_hash_second'] = data_props['second_step_data_hash']
+        kwargs['dataset_split_method'] = data_props['second_step']['split_method']
+        kwargs['dataset_split_steps_train'] = data_props['second_step']['split_props']['train_time_steps']
+        kwargs['dataset_split_steps_val'] = data_props['second_step']['split_props']['val_time_steps']
+        kwargs['dataset_split_steps_test'] = data_props['second_step']['split_props']['test_time_steps']
+        kwargs['dataset_iter_step'] = data_props['iter_step']
+        kwargs['dataset_normalization'] = data_props['second_step']['normalize_method']
+        kwargs['dataset_window_backlooking'] = data_props['first_step']['window_input_width']
+        kwargs['dataset_window_prediction'] = data_props['first_step']['window_pred_width']
+        kwargs['dataset_window_shift'] = data_props['first_step']['window_shift']
+        return kwargs
+
 
     def _get_prep_data(train_ds, val_ds, test_ds, flatten=False, keep_last_n_periods='all'):
         # seperate tfds to np
@@ -127,12 +151,13 @@ def main_run_linear_models(train_ds, val_ds, test_ds, data_props, activation_fun
 
 
     param_grid = dict(n_layers=list(range(1, NN_max_depth + 1)),
-                      first_layer_nodes=[0] if NN_max_depth == 1 else [128, 64, 32, 16],
-                      last_layer_nodes=[0] if NN_max_depth == 1 else [32, 16, 4],
+                      first_layer_nodes=[0] if NN_max_depth == 1 else [128, 64, 32, 16, 8],
+                      last_layer_nodes=[0] if NN_max_depth == 1 else [64, 32, 16, 8, 4],
                       activation_func=activation_funcs,
                       backlooking_window=[1, 2, 3, 4])
     hp_param_dict = _hp_tranform_param_dict(param_dict=param_grid)
     hp_param_dict['model_name'] = model_name
+    hp_param_dict['data_props'] = data_props
 
 
     def _optimize_objective(*args, **kwargs):
@@ -149,6 +174,7 @@ def main_run_linear_models(train_ds, val_ds, test_ds, data_props, activation_fun
         return_everything = kwargs.pop('return_everything', False)
         verbose = kwargs.pop('verbose', 0)
         model_name = kwargs.pop('model_name', 'linear')
+        data_props = kwargs.pop('data_props')
 
 
         dataset = _get_prep_data(train_ds, val_ds, test_ds, flatten=True, keep_last_n_periods=backlooking_window)
@@ -172,34 +198,52 @@ def main_run_linear_models(train_ds, val_ds, test_ds, data_props, activation_fun
                                                             MAX_EPOCHS=MAX_EPOCHS, patience=patience, model_name=model_name,
                                                             verbose=verbose)
 
-
+        # Get all data props for documentation in MLflow
+        kwargs.update(_extract_just_important_data_props(data_props))
+        kwargs['run'] = experiment_date_time
         mlflow_additional_params['kwargs'] = kwargs
 
-        train_performance = evaluate_model(model=model, tf_data=dataset['train_ds'])
-        val_performance = evaluate_model(model=model, tf_data=dataset['val_ds'])
-        test_performance = evaluate_model(model=model, tf_data=dataset['train_ds'], mlflow_additional_params=mlflow_additional_params)
+        train_performance = dict(zip(model.metrics_names, evaluate_model(model=model, tf_data=dataset['train_ds'])))
+        val_performance = dict(zip(model.metrics_names, evaluate_model(model=model, tf_data=dataset['val_ds'])))
+        test_performance = dict(zip(model.metrics_names, evaluate_model(model=model, tf_data=dataset['train_ds'], mlflow_additional_params=mlflow_additional_params)))
 
-        my_helpers.mlflow_last_run_add_param(param_dict=mlflow_additional_params)
+        # Only save model if close to 5% best models
+        try:
+            best_loss = float(trials.best_trial['result']['loss'])
+            current_loss = min(history.history['val_loss'])
+            if current_loss <= best_loss * (1 + 0.05):
+                save_model = True
+            else:
+                save_model = False
+        except:
+            save_model = True
+        mlflow_saved = my_helpers.mlflow_last_run_add_param(param_dict=mlflow_additional_params, save_model=save_model)
 
         tf.keras.backend.clear_session()
 
-        return_metrics = dict(loss=val_performance[0],
-                              status=STATUS_OK)
+        return_metrics = dict(loss=val_performance['loss'], all_metrics={'train': train_performance, 'val': val_performance, 'test': test_performance},
+                              status=STATUS_OK, mlflow=mlflow_saved, model_name=model_name)
 
         if return_everything:
-            return dict(model=model,
-                        model_name=model_name,
-                        train_history=history,
-                        train_performance=train_performance,
-                        val_performance=val_performance,
-                        test_performance=test_performance)
-        else:
-            return return_metrics
+            return_metrics['model'] = model
+            return_metrics['history'] = history
+
+        return return_metrics
+
+
+    ###### Get old best model records ######
+
+    storage_file_path = 'storage_best_model.json'
+    if not os.path.exists(storage_file_path):
+        best_model_storage = {}
+    else:
+        with open(storage_file_path) as json_file:
+            best_model_storage = json.load(json_file)
 
 
     ######## Search for best model ########
 
-    if redo_serach_best_model:
+    if redo_serach_best_model or model_name not in best_model_storage or data_props['iter_step'] not in best_model_storage[model_name]:
         warnings.filterwarnings('ignore')
         trials = Trials()
         best = fmin(fn=_optimize_objective,
@@ -210,102 +254,124 @@ def main_run_linear_models(train_ds, val_ds, test_ds, data_props, activation_fun
                     early_stop_fn=no_progress_loss(iteration_stop_count=20, percent_increase=0.05))
         warnings.simplefilter('always')
 
-    else:
-        # Hard code best results
-        best = {'activation_func': 2, 'backlooking_window': 0, 'first_layer_nodes': 2, 'last_layer_nodes': 1, 'n_layers': 0}
+        # getting all parameters for best model storage
+        mlflow_best_model = trials.best_trial['result']['mlflow']
+        best_params = {}
+        for key, idx in best.items():
+            best_params[key] = param_grid[key][idx]
 
-    best_params = {}
-    for key, idx in best.items():
-        best_params[key] = param_grid[key][idx]
-    print('Best Model:', best_params)
+        coef_names_ = list(data_props['look_ups']['out_lookup_col_name']['X'].keys())
+        coef_names_ = coef_names_ + [col + f'_sft_{i}' for i in range(1, best_params['backlooking_window']) for col in coef_names_]
+
+
+        # Saving best model to storage
+        if model_name not in best_model_storage:
+            best_model_storage[model_name] = {}
+        if data_props['iter_step'] not in best_model_storage[model_name]:
+            best_model_storage[model_name][data_props['iter_step']] = {'best_model': {'result': {'loss': 10 ** 10}}, 'history': {}}
+
+        best_model_param = dict(result={'loss': trials.best_trial['result']['loss'],
+                                        'all_metrics': trials.best_trial['result']['all_metrics']},
+                                model_name=trials.best_trial['result']['model_name'],
+                                model_id=trials.best_trial['result']['mlflow']['model_id'],
+                                run_id=experiment_date_time,
+                                input_coefs=coef_names_,
+                                path_saved_model=trials.best_trial['result']['mlflow']['saved_model_path'],
+                                status=trials.best_trial['result']['status'],
+                                params=best_params,
+                                data=_extract_just_important_data_props(data_props))
+
+        best_model_storage[model_name][data_props['iter_step']]['history'][experiment_date_time] = best_model_param
+        if trials.best_trial['result']['loss'] < best_model_storage[model_name][data_props['iter_step']]['best_model']['result']['loss']:
+            best_model_storage[model_name][data_props['iter_step']]['best_model'] = best_model_param
+
+        with open(storage_file_path, 'w') as outfile:
+            json.dump(best_model_storage, outfile)
+
+    else:
+        # Get best model from storage
+        best_model_param = best_model_storage[model_name][data_props['iter_step']]['best_model']
+
+
 
 
     ######## Get Best model again ########
+    best_model = tf.keras.models.load_model(best_model_param['path_saved_model'])
+    best_model.compile(loss=tf.losses.MeanAbsoluteError(), optimizer=tf.optimizers.Adam(), metrics=[tf.metrics.MeanAbsoluteError(), CustomMeanDirectionalAccuracy(), tf.losses.Huber(), tf.metrics.MeanAbsolutePercentageError(), tf.metrics.MeanSquaredError(), tf.metrics.MeanSquaredLogarithmicError()])
+    print('Best model is:', best_model_param)
 
-    output = _optimize_objective(**best_params, return_everything=True, verbose=1, model_name=f'best_{model_name}')
-    print('Best:', best_params)
-    print(output)
-
-
-    out = dict(model_name=output['model_name'],
-               model=output['model'],
-               error=pd.DataFrame({'train': output['train_performance'], 'val': output['val_performance'],'test': output['test_performance']}, index=output['model'].metrics_names),
-               best_model=pd.Series(best_params))
-
-    if np.isnan(output['train_performance'][0]):
-        out['status'] = 'error'
-        return out
-    else:
-        out['status'] = 'ok'
+    out = dict(best_model_param)
 
 
-    ####### Example Plotting #######
-
+    ####### Get examples for plotting #######
     if examples is not None:
         example_X = examples['X']
-        periods = best_params['backlooking_window']
+        periods = best_model_param['params']['backlooking_window']
         example_X = tf.data.Dataset.from_tensors(np.reshape(example_X[:, -periods:, :], (example_X.shape[0], -1)))
-        model = output['model']
-        out['examples_pred_y'] = model.predict(example_X)
+        out['examples_pred_y'] = best_model.predict(example_X)
 
 
 
-    ###### P-Values if 1 level only ######
-    if NN_max_depth == 1:
-        intercept_ = output['model'].layers[0].bias.numpy()
-        coef_ = output['model'].layers[0].weights[0].numpy()
-        coef_names_ = list(data_props['look_ups']['out_lookup_col_name']['X'].keys())
-        out['coef_'] = pd.Series(dict(zip(['intercept_'] + coef_names_, intercept_.tolist() + coef_.squeeze().tolist())))
+    ###### For 1 layer dense/linear models get coef & p-values ######
+    if NN_max_depth == 1 and isinstance(best_model.layers[0], tf.keras.layers.Dense):
+        # Get coefs
+        intercept_ = best_model.layers[0].bias.numpy()
+        coef_ = best_model.layers[0].weights[0].numpy()
+        out['coef_'] = pd.Series(dict(zip(['intercept_'] + best_model_param['input_coefs'], intercept_.tolist() + coef_.squeeze().tolist())))
 
-        dataset = _get_prep_data(train_ds, val_ds, test_ds, flatten=True, keep_last_n_periods=best_params['backlooking_window'])
+        dataset = _get_prep_data(train_ds, val_ds, test_ds, flatten=True, keep_last_n_periods=best_model_param['params']['backlooking_window'])
 
-
-        ###### Get P Values ######
+        # get p-values
         import app.e_analyses.my_custom_pvalue_calc as my_p_lib
 
         out['p_values'] = {}
         for data_set in ['train', 'val', 'test']:
-            y_pred = output['model'].predict(dataset[f'{data_set}_X'])
+            y_pred = best_model.predict(dataset[f'{data_set}_X'])
             y_pred = np.reshape(y_pred, (-1, 1))
             try:
                 p_values = my_p_lib.coef_pval(dataset[f'{data_set}_X'], dataset[f'{data_set}_y'], coef_, intercept_, y_pred)
-                p_values = pd.Series(dict(zip(coef_names_, p_values)))
+                p_values = pd.Series(dict(zip(best_model_param['input_coefs'], p_values)))
                 out['p_values'][data_set] = p_values
             except:
                 warnings.warn("P-Values: ValueError: Input contains infinity or nan.")
-                out['p_values'][data_set] = pd.Series(dict(zip(coef_names_, ['error'] * len(coef_names_))))
+                out['p_values'][data_set] = pd.Series(dict(zip(best_model_param['input_coefs'], ['error'] * len(best_model_param['input_coefs']))))
         out['p_values'] = pd.DataFrame(out['p_values'])
 
 
-        ##### Get Column Feature Importance #####
-        if return_permutation_importances:
+    ##### Get Column Feature Importance #####
+    if return_permutation_importances:
+        if 'feature_importance' in best_model_param:
+            out['feature_importance'] = best_model_param['feature_importance']
+
+        else:
             import eli5
             from eli5.sklearn import PermutationImportance
 
-            # Reconstruct model as Sklearn KerasRegressor model for Permutation Importance
-            best_params['input_size'] = dataset['input_shape']
-            best_params['output_size'] = dataset['output_shape']
-            best_params['compile'] = True
-            my_model = KerasRegressor(build_fn=lambda: createmodel(**best_params))
-            my_model.fit(dataset['train_X'].numpy(), np.reshape(dataset['train_y'].numpy(), (-1, 1)), verbose=0, epochs=2)
-            # Set/overwrite weights to have exactly the same model as above
-            my_model.model.layers[0].set_weights([coef_, intercept_])
-            # Validate if TF model same as new
-            y_pred = np.reshape(output['model'].predict(dataset['train_X'].numpy()), (-1, 1))
-            y_pred_validation = np.reshape(my_model.predict(dataset['train_X'].numpy()), (-1, 1))
-            if np.array_equal(y_pred, y_pred_validation) is False:
-                raise Exception('Re-fitted sklearn KerasRegressor Model for Permutation Importance is NOT IDENTICAL to TF best fit model!')
+            sklearn_model = KerasRegressor(build_fn=best_model)
+            sklearn_model.model = best_model
 
-            out['feature_importance'] = pd.DataFrame()
-            for data_set in ['train', 'val', 'test']:
+            dataset = _get_prep_data(train_ds, val_ds, test_ds, flatten=True, keep_last_n_periods=best_model_param['params']['backlooking_window'])
+
+            out['feature_importance'] = {}
+            for data_set in ['train', 'val']:
                 # Calculate actual FeatureImporttance
                 try:
-                    perm = PermutationImportance(my_model, cv='prefit').fit(dataset[f'{data_set}_X'].numpy(), np.reshape(dataset[f'{data_set}_y'].numpy(), (-1, 1)))
-                    feature_importances = eli5.format_as_dataframe(eli5.explain_weights(perm, feature_names=coef_names_, top=10 ** 10))
-                    out['feature_importance'] = pd.concat([out['feature_importance'].sort_index(), feature_importances.set_index('feature').rename(columns={'weight': f'{data_set}_weight', 'std': f'{data_set}_std'}).sort_index()], axis=1)
+                    perm = PermutationImportance(sklearn_model, cv='prefit').fit(dataset[f'{data_set}_X'].numpy(), np.reshape(dataset[f'{data_set}_y'].numpy(), (-1, 1)))
+                    feature_importances = eli5.format_as_dataframe(eli5.explain_weights(perm, feature_names=best_model_param['input_coefs'], top=10 ** 10))
+                    out['feature_importance'][data_set] = feature_importances.set_index('feature').to_dict()
                 except:
                     warnings.warn("PermutationImportance: ValueError: Input contains infinity or a value too large for dtype('float16').")
 
+            if out['feature_importance'] != {}:
+                best_model_param['feature_importance'] = out['feature_importance']
+                best_model_storage[model_name][data_props['iter_step']]['best_model']['feature_importance'] = out[ 'feature_importance']
+                best_model_storage[model_name][data_props['iter_step']]['history'][experiment_date_time][ 'feature_importance'] = out['feature_importance']
+
+                with open(storage_file_path, 'w') as outfile:
+                    json.dump(best_model_storage, outfile)
+
+
+    out['status'] = 'ok'
     return out
 
 
@@ -343,18 +409,45 @@ def run_model_acorss_time(data_obj, model_name, activation_funcs, y_col, max_ser
         if results['status'] == 'ok':
             examples['pred'][model_name] = results['examples_pred_y']
 
+            final_results = {}
 
-            # Get all data props for documentation
-            result_data_props = dict(**data_props['first_step'], first_step_data_hash=data_props['first_step_data_hash'])
-            result_data_props.update(**data_props['second_step'], second_step_data_hash=data_props['second_step_data_hash'])
-            result_data_props.update(**data_props['third_filter'], iter_step=data_props['iter_step'])
-            result_data_props.pop('data_hash')
-            result_data_props = pd.Series(result_data_props, name=out['iter_step'])
-            results['data'] = result_data_props
-            results['best_model'] = results['best_model'].append(pd.Series([results['model_name']], index=['model_id']))
-            results['best_model'] = results['best_model'].append(pd.Series([model_name], index=['model_name']))
+            model_props = {'model_name': results['model_name'],
+                           'model_id': results['model_id'],
+                           'run_id': results['run_id'],
+                           'val_loss': results['result']['loss'],
+                           'path_saved_model': results['path_saved_model'],
+                           'status': results['status']}
+            model_props.update(results['params'])
+            model_props.update(results['data'])
+            model_props = pd.Series(model_props)
+            final_results['model'] = model_props
 
-            for key, value in results.items():
+
+            if 'p_values' in results:
+                final_results['pvalues'] = results['p_values']
+
+            if 'coef_' in results:
+                final_results['coef'] = results['coef_']
+
+
+            if 'feature_importance' in results:
+                model_fi = pd.DataFrame()
+                for data_set, value in results['feature_importance'].items():
+                    tmp = pd.DataFrame(value)
+                    tmp.columns = [f'{data_set}_{col}' for col in tmp.columns.tolist()]
+                    tmp.sort_index(inplace=True)
+                    model_fi = pd.concat([model_fi.sort_index(), tmp], axis=1)
+                final_results['feature_importance'] = model_fi
+
+
+            if 'result' in results:
+                metrics = pd.DataFrame(results['result']['all_metrics'])
+                final_results['error'] = metrics
+
+
+
+            # Actual saving as csv
+            for key, value in final_results.items():
                 if isinstance(value, pd.DataFrame):
                     value = _reformat_DF(value, head=out['iter_step'])
                 elif isinstance(value, pd.Series):
