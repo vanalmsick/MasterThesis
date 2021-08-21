@@ -9,6 +9,7 @@ from silx.io import dictdump
 from tqdm import tqdm
 import multiprocessing
 import eikon as ek
+import tensorflow as tf
 
 
 ######################################### GENERAL #########################################
@@ -518,7 +519,7 @@ def word_regression_table(model, X, y, output_file, title=None, overwrite_summar
 
 
 
-def mlflow_last_run_add_param(param_dict):
+def mlflow_last_run_add_param(param_dict, save_model=False):
     last_experiment_id, last_run_id, _ = mlflow.search_runs(order_by=['attribute.end_time DESC'])[['experiment_id', 'run_id', 'end_time']].iloc[0]
 
     mlflow_dict = {'layer_df': ['notes'],
@@ -542,7 +543,9 @@ def mlflow_last_run_add_param(param_dict):
                    'data_statistics': ['artifact'],
                    'data_props': [],
                    'data_time_period': ['tag', 'param'],
-                   'data_train_sample_size': ['param']}
+                   'data_train_sample_size': ['param'],
+                   'model_type': ['param'],
+                   'history_obj': []}
 
     notes = ''
     if "model_name" in param_dict:
@@ -600,6 +603,17 @@ def mlflow_last_run_add_param(param_dict):
 
 
     with mlflow.start_run(run_id=last_run_id) as run:
+        if save_model and param_dict['model_type'] == 'TensorFlow':
+            path_saved_model = os.path.join(run.info.artifact_uri, 'tf_model')
+            model = param_dict.pop('history_obj').model
+            model.compile(loss=tf.losses.MeanAbsoluteError(), optimizer=tf.optimizers.Adam(),
+                          metrics=[tf.metrics.MeanAbsoluteError(), tf.metrics.MeanAbsolutePercentageError(),
+                                   tf.metrics.MeanSquaredError(), tf.metrics.MeanSquaredLogarithmicError()])
+            model.save(path_saved_model, save_traces=False)
+        else:
+            path_saved_model = None
+
+
         for key, value in param_dict.items():
             if key[:8] == 'metrics_':
                 type_list = ['metric_dict']
@@ -633,6 +647,8 @@ def mlflow_last_run_add_param(param_dict):
 
         mlflow.set_tag("mlflow.note.content", notes)
 
+
+    return {'model_id': last_run_id,'model_name': param_dict['model_name'], 'saved_model_path': path_saved_model}
 
 
 def sort_list_of_sub(sub_li, sort_element=0):

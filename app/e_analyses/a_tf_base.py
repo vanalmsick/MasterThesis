@@ -207,11 +207,11 @@ def main_run_linear_models(train_ds, val_ds, test_ds, data_props, activation_fun
         val_performance = dict(zip(model.metrics_names, evaluate_model(model=model, tf_data=dataset['val_ds'])))
         test_performance = dict(zip(model.metrics_names, evaluate_model(model=model, tf_data=dataset['train_ds'], mlflow_additional_params=mlflow_additional_params)))
 
-        # Only save model if close to 5% best models
+        # Only save model if close to 15% best models
         try:
             best_loss = float(trials.best_trial['result']['loss'])
             current_loss = min(history.history['val_loss'])
-            if current_loss <= best_loss * (1 + 0.05):
+            if current_loss <= best_loss * (1 + 0.15):
                 save_model = True
             else:
                 save_model = False
@@ -233,7 +233,7 @@ def main_run_linear_models(train_ds, val_ds, test_ds, data_props, activation_fun
 
     ###### Get old best model records ######
 
-    storage_file_path = 'storage_best_model.json'
+    storage_file_path = os.path.join(my_helpers.get_project_directories(key='cache_dir'), 'storage_best_model.json')
     if not os.path.exists(storage_file_path):
         best_model_storage = {}
     else:

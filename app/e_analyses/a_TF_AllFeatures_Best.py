@@ -57,8 +57,10 @@ if __name__ == '__main__':
     backlooking_yeras = 4
 
     # results location
-    export_results = False
-    #export_results = '/Users/vanalmsick/Workspace/MasterThesis/output/'
+    #export_results = False
+    export_results = '/Users/vanalmsick/Workspace/MasterThesis/output/'
+
+    model_name = 'dense_all_best'
 
 
     ###########################################################################
@@ -134,22 +136,22 @@ if __name__ == '__main__':
 
     ############# RUN ALL MODELS ACROSS TIME #############
 
-    out = data['200300_201800']
-    col_finding_data = data.df_dataset(out_dict=out)[0]
+    #out = data['200300_201800']
+    #col_finding_data = data.df_dataset(out_dict=out)[0]
 
-    filter_cols = col_finding_data[0].columns.tolist()  # all columns
+    #filter_cols = col_finding_data[0].columns.tolist()  # all columns
     #filter_cols = just_good_features(*col_finding_data)
-    print(f'Reduced columns to {len(filter_cols)} (because of high corr / VIF / very low variance):', filter_cols)
+    #print(f'Reduced columns to {len(filter_cols)} (because of high corr / VIF / very low variance):', filter_cols)
 
-    data.filter_features(just_include=filter_cols)
+    #data.filter_features(just_include=filter_cols)
 
 
 
     run_model_acorss_time(data_obj=data, max_serach_iterations=100, MAX_EPOCHS=1000, patience=25, example_len=5, example_list=[], y_col=y_pred_col[0], export_results=export_results,
-                          redo_serach_best_model=True,
-                          model_name='linear_all_best',
+                          redo_serach_best_model=False,
+                          model_name=model_name,
                           activation_funcs=['linear', 'sigmoid', 'tanh', 'relu', 'elu', 'selu'],
-                          NN_max_depth=4)
+                          NN_max_depth=5)
 
 
     ######################################################
