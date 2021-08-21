@@ -1,0 +1,27 @@
+,200000_201500,200100_201600,200200_201700,200300_201800,200400_201900,200500_202000
+activation_func,linear,tanh,linear,linear,linear,linear
+backlooking_window,1,4,1,1,1,1
+dataset_cols_X_exclude,[],[],[],[],[],[]
+dataset_cols_X_just_these,False,False,False,False,False,False
+dataset_cols_y,['y_eps pct'],['y_eps pct'],['y_eps pct'],['y_eps pct'],['y_eps pct'],['y_eps pct']
+dataset_hash_first,a8417e2f5d,a8417e2f5d,a8417e2f5d,a8417e2f5d,a8417e2f5d,a8417e2f5d
+dataset_hash_input,-4402396035568867005,-4402396035568867005,-4402396035568867005,-4402396035568867005,-4402396035568867005,-4402396035568867005
+dataset_hash_second,e7831bc050,e7831bc050,e7831bc050,e7831bc050,e7831bc050,e7831bc050
+dataset_iter_step,200000_201500,200100_201600,200200_201700,200300_201800,200400_201900,200500_202000
+dataset_normalization,block,block,block,block,block,block
+dataset_split_method,block_rolling,block_rolling,block_rolling,block_rolling,block_rolling,block_rolling
+dataset_split_steps_test,1,1,1,1,1,1
+dataset_split_steps_train,10,10,10,10,10,10
+dataset_split_steps_val,1,1,1,1,1,1
+dataset_window_backlooking,4,4,4,4,4,4
+dataset_window_prediction,1,1,1,1,1,1
+dataset_window_shift,1,1,1,1,1,1
+first_layer_nodes,8,8,8,16,64,16
+last_layer_nodes,4,64,32,16,16,64
+model_id,89bd0ad8b1a84c68b5f69a4c923c5d88,c945057174894fc0bcc9bff8c5d2e353,f7847fcc652d4a1686e0c3bd80226712,e9f7b347837b41c2bd0e5011ee34819d,1f92ee46cf064686a8278af2f349e12a,48ff59b7b25a44d9b170ea4d430b6707
+model_name,210821153746_dense_all_best_w1_l1_alinear,210821154356_dense_all_best_w4_l4_atanh,210821155853_dense_all_best_w1_l4_alinear,210821161303_dense_all_best_w1_l5_alinear,210821163421_dense_all_best_w1_l3_alinear,210821163902_dense_all_best_w1_l4_alinear
+n_layers,1,4,4,5,3,4
+path_saved_model,file:///Users/vanalmsick/Workspace/MasterThesis/cache/MLflow/1/89bd0ad8b1a84c68b5f69a4c923c5d88/artifacts/tf_model,file:///Users/vanalmsick/Workspace/MasterThesis/cache/MLflow/1/c945057174894fc0bcc9bff8c5d2e353/artifacts/tf_model,file:///Users/vanalmsick/Workspace/MasterThesis/cache/MLflow/1/f7847fcc652d4a1686e0c3bd80226712/artifacts/tf_model,file:///Users/vanalmsick/Workspace/MasterThesis/cache/MLflow/1/e9f7b347837b41c2bd0e5011ee34819d/artifacts/tf_model,file:///Users/vanalmsick/Workspace/MasterThesis/cache/MLflow/1/1f92ee46cf064686a8278af2f349e12a/artifacts/tf_model,file:///Users/vanalmsick/Workspace/MasterThesis/cache/MLflow/1/48ff59b7b25a44d9b170ea4d430b6707/artifacts/tf_model
+run_id,20210821153118,20210821154355,20210821155239,20210821160620,20210821162048,20210821163749
+status,ok,ok,ok,ok,ok,ok
+val_loss,0.09375984966754913,0.08635684102773666,0.14581097662448883,0.16344696283340454,0.1168486475944519,0.20191477239131927
