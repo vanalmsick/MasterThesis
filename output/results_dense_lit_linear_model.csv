@@ -4,11 +4,11 @@ backlooking_window,1,1,1,1,1,1
 dataset_cols_X_exclude,[],[],[],[],[],[]
 dataset_cols_X_just_these,"['1_Inventory', '3_CAPX', '4_RnD', '5_Gross Margin', '6_Sales & Admin. Exp.', '9_Order Backlog', '10_Labor Force', '11_FIFO/LIFO dummy', 'y_eps pct']","['1_Inventory', '3_CAPX', '4_RnD', '5_Gross Margin', '6_Sales & Admin. Exp.', '9_Order Backlog', '10_Labor Force', '11_FIFO/LIFO dummy', 'y_eps pct']","['1_Inventory', '3_CAPX', '4_RnD', '5_Gross Margin', '6_Sales & Admin. Exp.', '9_Order Backlog', '10_Labor Force', '11_FIFO/LIFO dummy', 'y_eps pct']","['1_Inventory', '3_CAPX', '4_RnD', '5_Gross Margin', '6_Sales & Admin. Exp.', '9_Order Backlog', '10_Labor Force', '11_FIFO/LIFO dummy', 'y_eps pct']","['1_Inventory', '3_CAPX', '4_RnD', '5_Gross Margin', '6_Sales & Admin. Exp.', '9_Order Backlog', '10_Labor Force', '11_FIFO/LIFO dummy', 'y_eps pct']","['1_Inventory', '3_CAPX', '4_RnD', '5_Gross Margin', '6_Sales & Admin. Exp.', '9_Order Backlog', '10_Labor Force', '11_FIFO/LIFO dummy', 'y_eps pct']"
 dataset_cols_y,['y_eps pct'],['y_eps pct'],['y_eps pct'],['y_eps pct'],['y_eps pct'],['y_eps pct']
-dataset_hash_first,41cae77f1c,41cae77f1c,41cae77f1c,41cae77f1c,41cae77f1c,41cae77f1c
-dataset_hash_input,-287795440389928264,-287795440389928264,-287795440389928264,-287795440389928264,-287795440389928264,-287795440389928264
-dataset_hash_second,e7831bc050,e7831bc050,e7831bc050,e7831bc050,e7831bc050,e7831bc050
+dataset_hash_first,686ddaad1b,686ddaad1b,686ddaad1b,686ddaad1b,686ddaad1b,686ddaad1b
+dataset_hash_input,-4640898945680983393,-4640898945680983393,-4640898945680983393,-4640898945680983393,-4640898945680983393,-4640898945680983393
+dataset_hash_second,150acdaef4,150acdaef4,150acdaef4,150acdaef4,150acdaef4,150acdaef4
 dataset_iter_step,200000_201500,200100_201600,200200_201700,200300_201800,200400_201900,200500_202000
-dataset_normalization,block,block,block,block,block,block
+dataset_normalization,no,no,no,no,no,no
 dataset_split_method,block_rolling,block_rolling,block_rolling,block_rolling,block_rolling,block_rolling
 dataset_split_steps_test,1,1,1,1,1,1
 dataset_split_steps_train,10,10,10,10,10,10
@@ -18,10 +18,10 @@ dataset_window_prediction,1,1,1,1,1,1
 dataset_window_shift,1,1,1,1,1,1
 first_layer_nodes,0,0,0,0,0,0
 last_layer_nodes,0,0,0,0,0,0
-model_id,920e40d5678e484d93a20d42a8a96ff7,4fd4b702e75c442e91c863cc149261b3,a9149c1855bd4026865044706a7942dd,6c9f86cd4de343cd91ae258885349518,9dcb74b7bdde47ab8a33b72101e0290f,b5fdd16301434e6da8dcff9e51410f3b
-model_name,210821190302_dense_lit_linear_w1_l1_alinear,210821190358_dense_lit_linear_w1_l1_alinear,210821190532_dense_lit_linear_w1_l1_alinear,210821190716_dense_lit_linear_w1_l1_alinear,210821190839_dense_lit_linear_w1_l1_alinear,210821191006_dense_lit_linear_w1_l1_alinear
+model_id,fb97816f25b240cea8db1b43dbde98ad,9bde875cb4e244a6abfe75326452c494,02dc64867fe449a0b008651b9bbbe9c0,d7c9073655a34b17b760c8262e933bee,54bc59a499a94817913f83c93efcbfee,ac898d02978d42ed87dcc582464a93e3
+model_name,210828113032_dense_lit_linear_w1_l1_alinear,210828113127_dense_lit_linear_w1_l1_alinear,210828113216_dense_lit_linear_w1_l1_alinear,210828113320_dense_lit_linear_w1_l1_alinear,210828113616_dense_lit_linear_w1_l1_alinear,210828113647_dense_lit_linear_w1_l1_alinear
 n_layers,1,1,1,1,1,1
-path_saved_model,file:///Users/vanalmsick/Workspace/MasterThesis/cache/MLflow/3/920e40d5678e484d93a20d42a8a96ff7/artifacts/tf_model,file:///Users/vanalmsick/Workspace/MasterThesis/cache/MLflow/3/4fd4b702e75c442e91c863cc149261b3/artifacts/tf_model,file:///Users/vanalmsick/Workspace/MasterThesis/cache/MLflow/3/a9149c1855bd4026865044706a7942dd/artifacts/tf_model,file:///Users/vanalmsick/Workspace/MasterThesis/cache/MLflow/3/6c9f86cd4de343cd91ae258885349518/artifacts/tf_model,file:///Users/vanalmsick/Workspace/MasterThesis/cache/MLflow/3/9dcb74b7bdde47ab8a33b72101e0290f/artifacts/tf_model,file:///Users/vanalmsick/Workspace/MasterThesis/cache/MLflow/3/b5fdd16301434e6da8dcff9e51410f3b/artifacts/tf_model
-run_id,20210821190247,20210821190358,20210821190510,20210821190715,20210821190839,20210821190941
+path_saved_model,file:///Users/vanalmsick/Workspace/MasterThesis/cache/MLflow/3/fb97816f25b240cea8db1b43dbde98ad/artifacts/tf_model,file:///Users/vanalmsick/Workspace/MasterThesis/cache/MLflow/3/9bde875cb4e244a6abfe75326452c494/artifacts/tf_model,file:///Users/vanalmsick/Workspace/MasterThesis/cache/MLflow/3/02dc64867fe449a0b008651b9bbbe9c0/artifacts/tf_model,file:///Users/vanalmsick/Workspace/MasterThesis/cache/MLflow/3/d7c9073655a34b17b760c8262e933bee/artifacts/tf_model,file:///Users/vanalmsick/Workspace/MasterThesis/cache/MLflow/3/54bc59a499a94817913f83c93efcbfee/artifacts/tf_model,file:///Users/vanalmsick/Workspace/MasterThesis/cache/MLflow/3/ac898d02978d42ed87dcc582464a93e3/artifacts/tf_model
+run_id,20210828113032,20210828113127,20210828113216,20210828113307,20210828113402,20210828113646
 status,ok,ok,ok,ok,ok,ok
-val_loss,0.09389036893844604,0.08411072939634323,0.14934873580932617,0.1642216145992279,0.11781147867441177,0.20280912518501282
+val_loss,0.2973691523075104,0.2674018144607544,0.32808929681777954,0.35259976983070374,0.3175807595252991,0.38681724667549133

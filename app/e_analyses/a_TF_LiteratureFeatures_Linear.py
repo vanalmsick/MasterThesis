@@ -57,8 +57,8 @@ if __name__ == '__main__':
     backlooking_yeras = 4
 
     # results location
-    export_results = False
-    # export_results = '/Users/vanalmsick/Workspace/MasterThesis/output/'
+    # export_results = False
+    export_results = '/Users/vanalmsick/Workspace/MasterThesis/output/'
 
     model_name = 'dense_lit_linear'
 
@@ -123,8 +123,8 @@ if __name__ == '__main__':
                              test_time_steps=qrt_multiplier, shuffle=True)
     # data.single_time_rolling(val_time_steps=1, test_time_steps=1, shuffle=True)
 
-    #data.normalize(method='no')
-    data.normalize(method='block')
+    data.normalize(method='no')
+    # data.normalize(method='block')
     #data.normalize(method='time')
     # data.normalize(method='set')
 
@@ -138,7 +138,7 @@ if __name__ == '__main__':
     ############# RUN ALL MODELS ACROSS TIME #############
 
     run_model_acorss_time(data_obj=data, max_serach_iterations= 4 * 4, MAX_EPOCHS=1000, patience=8, example_len=5, example_list=[], y_col=y_pred_col[0], export_results=export_results,
-                          redo_serach_best_model=False,
+                          redo_serach_best_model=True,
                           model_name=model_name,
                           activation_funcs=['linear'],
                           max_backlooking=1,
