@@ -14,7 +14,7 @@ def get_pct_change(df, time_cols=['period_year', 'period_qrt'], company_cols=['g
     df_cp = df.copy()
     df_cp = df_cp.set_index(company_cols + time_cols)
     df_cp = df_cp.sort_index()
-    df_cp = df_cp.select_dtypes(np.number).groupby(level=company_cols).pct_change() * 100
+    df_cp = df_cp.select_dtypes(np.number).groupby(level=company_cols).pct_change()
     if reset_index:
         df_cp = df_cp.reset_index()
     return df_cp.fillna(0)
@@ -280,6 +280,7 @@ def feature_engerneeing(dataset, comp_col, time_cols, industry_col, all_features
                                    time_cols=time_cols, exclude_cols=[industry_col, 'sector', 'exchangename', 'headquarterscountry', 'analystrecom'])
 
     df_all = df_all.replace(['inf', 'nan', '-inf', np.inf, -np.inf, np.nan], 0)
+    df_all = pd.DataFrame(np.nan_to_num(df_all), columns=df_all.columns)
 
     # ToDo: What do in the end if NaN after feature engerneeing? drop or fill?
     df_all = df_all.dropna()
@@ -302,6 +303,8 @@ def feature_engerneeing(dataset, comp_col, time_cols, industry_col, all_features
             cols.remove(col)
     df_z_check = df_all[cols]
     #keep_rows = (np.abs(stats.zscore(df_z_check.replace(['inf', 'nan', np.inf, -np.inf, np.nan], 0))) < 3).all(axis=1)
+
+    df_all = df_all[(df_all['y_eps pct'] > -3) & (df_all['y_eps pct'] < 3)]
 
     #df_all = df_all[keep_rows]
 

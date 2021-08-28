@@ -95,9 +95,10 @@ class data_prep:
         #    tmp = pd.get_dummies(df[col], dummy_na=True, drop_first=True, prefix=str(col))
         #    dummy_dict[col] = tmp.columns.tolist()
         #    df = pd.concat([df, tmp], axis=1)
-        self.data = df.drop(columns=cat_cols)
+        #self.data = df.drop(columns=cat_cols)
+        self.data = df
         # ToDo: Implement real NaN handling
-        self.data = self.data.fillna(self.data.mean().fillna(0))
+        #self.data = self.data.fillna(self.data.mean().fillna(0))
         self.dummy_col_dict = dummy_dict
 
 
@@ -202,16 +203,16 @@ class data_prep:
         norm_param = {}
 
         tmp_df = df[(df.index >= idx_lower) & (df.index <= idx_upper)]
-        tmp_mean = tmp_df[norm_cols].mean().fillna(0)
-        tmp_std = tmp_df[norm_cols].std().fillna(1)
+        tmp_mean = tmp_df[norm_cols].fillna(tmp_df[norm_cols].mean()).mean()
+        tmp_std = tmp_df[norm_cols].fillna(tmp_df[norm_cols].mean()).std()
         tmp_mean_np = my.custom_hdf5.pd_series_to_2d_array(pd_series=tmp_mean)
         tmp_std_np = my.custom_hdf5.pd_series_to_2d_array(pd_series=tmp_std)
         norm_param['__all__'] = {'mean': tmp_mean_np, 'std': tmp_std_np}
 
         for comp in comp_list:
             tmp_df = df[(df[self.dataset_company_col] == comp) & (df.index >= idx_lower) & (df.index <= idx_upper)]
-            tmp_mean = tmp_df[norm_cols].mean().fillna(0)
-            tmp_std = tmp_df[norm_cols].std().fillna(1)
+            tmp_mean = tmp_df[norm_cols].fillna(tmp_df[norm_cols].mean()).mean()
+            tmp_std = tmp_df[norm_cols].fillna(tmp_df[norm_cols].mean()).std()
             tmp_mean_np = my.custom_hdf5.pd_series_to_2d_array(pd_series=tmp_mean)
             tmp_std_np = my.custom_hdf5.pd_series_to_2d_array(pd_series=tmp_std)
             norm_param[f'c_{comp}'] = {'mean': tmp_mean_np, 'std': tmp_std_np}
@@ -537,6 +538,7 @@ class data_prep:
             test_y = loaded['test_y']
             test_idx = loaded['test_idx']
             ndarray_columns = pickle.load(open((final_file[:-4] + '_cols.pkl'), 'rb'))
+            y_data = pickle.load(open((final_file[:-4] + '_y.pkl'), 'rb'))
 
 
             print('Got data from cached file.')
@@ -544,6 +546,33 @@ class data_prep:
         else:
 
             start = time.time()
+
+            ##################### ARIMA: just y #####################
+
+            arima_dict = list(train_dict)
+            arima_dict.extend(val_dict)
+            arima_dict.extend(test_dict)
+
+            new_arima_dict = []
+            for i in range(len(arima_dict) - 2):
+                new_arima_dict.append((arima_dict[i][0], arima_dict[i][1], arima_dict[i + 1][1], arima_dict[i + 2][1]))
+
+            y_data = {}
+
+            tmp_data = self.data[[self.dataset_company_col] + self.dataset_iter_col + self.dataset_y_col].copy()
+            for comp in self.comps:
+                comp_tmp_data = tmp_data[tmp_data[self.dataset_company_col] == comp].sort_index()
+                if self.window_input_width + (self.window_pred_width * 3) <= len(comp_tmp_data):
+                    for lower_idx, upper_idx, val_idx, test_idx in new_arima_dict:
+                        tmp = comp_tmp_data.loc[lower_idx:test_idx]
+                        if self.window_input_width + (self.window_pred_width * 3) == len(tmp):
+                            if comp not in y_data:
+                                y_data[comp] = {}
+                            idx = (lower_idx, upper_idx, val_idx, test_idx)
+                            y_data[comp][idx] = tmp
+
+
+
 
             ##################### TRAIN #####################
 
@@ -587,9 +616,9 @@ class data_prep:
             train_X = np.asarray(train_X)
             train_y = np.asarray(train_y)
             train_idx = np.asarray(train_idx)
-            with open('train.txt', 'w') as f:
-                for i in train_col_list:
-                    f.write(str(i) + '\n')
+            #with open('train.txt', 'w') as f:
+            #    for i in train_col_list:
+            #        f.write(str(i) + '\n')
             if all(elem == train_col_list[0] for elem in train_col_list) is False:
                 raise Exception('Not all parts in train have the same columns!')
 
@@ -619,9 +648,9 @@ class data_prep:
             val_X = np.asarray(val_X)
             val_y = np.asarray(val_y)
             val_idx = np.asarray(val_idx)
-            with open('val.txt', 'w') as f:
-                for i in val_col_list:
-                    f.write(str(i) + '\n')
+            #with open('val.txt', 'w') as f:
+            #    for i in val_col_list:
+            #        f.write(str(i) + '\n')
             if all(elem == val_col_list[0] for elem in val_col_list) is False:
                 raise Exception('Not all parts in validation have the same columns!')
             if val_col_list[0] != train_col_list[0]:
@@ -652,9 +681,9 @@ class data_prep:
             test_X = np.asarray(test_X)
             test_y = np.asarray(test_y)
             test_idx = np.asarray(test_idx)
-            with open('test.txt', 'w') as f:
-                for i in test_col_list:
-                    f.write(str(i) + '\n')
+            #with open('test.txt', 'w') as f:
+            #    for i in test_col_list:
+            #        f.write(str(i) + '\n')
             if all(elem == test_col_list[0] for elem in test_col_list) is False:
                 raise Exception('Not all parts in validation have the same columns!')
             if test_col_list[0] != train_col_list[0]:
@@ -670,6 +699,7 @@ class data_prep:
             warning_list.to_csv((final_file[:-4] + '_warnings.csv'), index=False)
 
             np.savez_compressed(final_file, train_X=train_X, train_y=train_y, train_idx=train_idx, val_X=val_X, val_y=val_y, val_idx=val_idx, test_X=test_X, test_y=test_y, test_idx=test_idx)
+            pickle.dump(y_data, open((final_file[:-4] + '_y.pkl'), 'wb'))
 
             end = time.time()
 
@@ -680,6 +710,7 @@ class data_prep:
                'train': {'X': train_X, 'y': train_y, 'idx': train_idx},
                'val':   {'X': val_X,   'y': val_y,   'idx': val_idx},
                'test':  {'X': test_X,  'y': test_y,  'idx': test_idx},
+               'y_dataset': y_data,
                'columns': ndarray_columns,
                'columns_lookup': {'X': dict(zip(list(ndarray_columns['X'].values()), list(ndarray_columns['X'].keys()))),
                                   'y': dict(zip(list(ndarray_columns['y'].values()), list(ndarray_columns['y'].keys())))}}
@@ -690,7 +721,7 @@ class data_prep:
         return OUT
 
 
-    def get_examples(self, out=None, example_list=[], example_len=5, random_seed=42):
+    def get_examples(self, out=None, example_list=[], y_col='y_eps', example_len=5, random_seed=42):
         if out is None:
             out = self.latest_out
         if len(example_list) == 0:
@@ -704,7 +735,7 @@ class data_prep:
         example_dict['y'] = out['test']['y'][example_list, :, :]
         y_col_idx_in_X = list(out['columns_lookup']['X'].values())[0]
         example_dict['y_hist'] = out['test']['X'][example_list, :, y_col_idx_in_X]
-        y_col_idx_in_y = out['columns_lookup']['y'][self.dataset_y_col[0]]
+        y_col_idx_in_y = out['columns_lookup']['y'][y_col]
         example_dict['y_true'] = out['test']['y'][example_list, :, y_col_idx_in_y]
 
         example_dict['columns'] = out['columns']
@@ -779,6 +810,7 @@ class data_prep:
     def tsds_dataset(self, out='all', out_dict=None, transpose_y=True):
         if out_dict is None:
             out_dict = self.latest_out
+        self.latest_out = out_dict
         if out=='all':
             out = ['train', 'val', 'test']
         if type(out) != list:
@@ -788,13 +820,14 @@ class data_prep:
             tmp_y = out_dict[i]['y']
             if transpose_y:
                 tmp_y = tmp_y.reshape((-1, tmp_y.shape[2], tmp_y.shape[1]))
-            tmp = tf.data.Dataset.from_tensors((out_dict[i]['X'], tmp_y))
+            tmp = tf.data.Dataset.from_tensors((out_dict[i]['X'].astype(np.float32), tmp_y.astype(np.float32)))
             output.append(tmp)
         return output
 
     def np_dataset(self, out='all', out_dict=None, transpose_y=True):
         if out_dict is None:
             out_dict = self.latest_out
+        self.latest_out = out_dict
         if out=='all':
             out = ['train', 'val', 'test']
         if type(out) != list:
@@ -808,9 +841,17 @@ class data_prep:
             output.append(tmp)
         return output
 
+    def y_dataset(self, out='all', out_dict=None):
+        if out_dict is None:
+            out_dict = self.latest_out
+        self.latest_out = out_dict
+
+        return out_dict['y_dataset'], {'window_input_width': self.window_input_width, 'window_pred_width': self.window_pred_width, 'window_shift': self.window_shift}
+
     def df_dataset(self, out='all', year_idx=-1, out_dict=None, transpose_y=True):
         if out_dict is None:
             out_dict = self.latest_out
+        self.latest_out = out_dict
         if out=='all':
             out = ['train', 'val', 'test']
         if type(out) != list:
@@ -1016,6 +1057,7 @@ class data_prep:
         cols_y = OUT['columns']['y']
         cols_lookup_X = OUT['columns_lookup']['X']
         cols_lookup_y = OUT['columns_lookup']['y']
+        y_dataset = OUT['y_dataset']
 
 
         # Filter X columns
@@ -1073,6 +1115,7 @@ class data_prep:
             train_X, train_y, train_idx = _sub_help_filter(train_X, train_y, train_idx)
             val_X, val_y, val_idx = _sub_help_filter(val_X, val_y, val_idx)
             test_X, test_y, test_idx = _sub_help_filter(test_X, test_y, test_idx)
+            warnings.warn('Implement filtering on y_dataset')
 
 
 
@@ -1080,6 +1123,7 @@ class data_prep:
                'train': {'X': train_X, 'y': train_y, 'idx': train_idx},
                'val': {'X': val_X, 'y': val_y, 'idx': val_idx},
                'test': {'X': test_X, 'y': test_y, 'idx': test_idx},
+               'y_dataset': y_dataset,
                'columns': {'X': cols_X, 'y': cols_y},
                'columns_lookup': {'X': cols_lookup_X, 'y': cols_lookup_y}}
 

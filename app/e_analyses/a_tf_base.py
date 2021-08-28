@@ -12,6 +12,7 @@ import json
 if str(os.getcwd())[-3:] != 'app': raise Exception(f'Working dir must be .../app folder and not "{os.getcwd()}"')
 from app.z_helpers import helpers as my_helpers
 
+from app.d_prediction.NN_tensorflow_models import TF_ERROR_METRICS
 from app.d_prediction.NN_tensorflow_models import compile_and_fit, evaluate_model, CustomMeanDirectionalAccuracy
 
 from tensorflow.keras.models import Sequential
@@ -58,27 +59,39 @@ def FindLayerNodesLinear(n_layers, first_layer_nodes, last_layer_nodes):
     return layers
 
 
-def createmodel(n_layers, first_layer_nodes, last_layer_nodes, activation_func, input_size, output_size, compile=False, model_name=None, **kwargs):
+def createmodel(n_layers, first_layer_nodes, last_layer_nodes, activation_func, input_size, output_size, layer_type='dense', compile=False, model_name=None, **kwargs):
     model = Sequential()
     n_nodes = FindLayerNodesLinear(n_layers, first_layer_nodes, last_layer_nodes)
     for i in range(1, n_layers):
         if i == 1:
-            model.add(Dense(first_layer_nodes, input_dim=input_size, activation=activation_func))
+            if layer_type == 'dense':
+                model.add(Dense(first_layer_nodes, input_dim=input_size, activation=activation_func))
+            elif layer_type == 'lstm':
+                model.add(tf.keras.layers.LSTM(first_layer_nodes, return_sequences=True , input_shape=input_size, activation=activation_func))
+            else:
+                raise Exception(f'Unknown layer type {layer_type}')
         else:
-            model.add(Dense(n_nodes[i - 1], activation=activation_func))
+            if layer_type == 'dense':
+                model.add(Dense(n_nodes[i - 1], activation=activation_func))
+            elif layer_type == 'lstm':
+                model.add(tf.keras.layers.LSTM(first_layer_nodes, return_sequences=True , activation=activation_func))
+            else:
+                raise Exception(f'Unknown layer type {layer_type}')
 
     # Finally, the output layer should have a single node in binary classification
     model.add(Dense(output_size, activation=activation_func))
 
     if compile:
-        model.compile(loss=tf.losses.MeanAbsoluteError(), optimizer=tf.optimizers.Adam(), metrics=[tf.metrics.MeanAbsoluteError(), CustomMeanDirectionalAccuracy(), tf.losses.Huber(), tf.metrics.MeanAbsolutePercentageError(), tf.metrics.MeanSquaredError(), tf.metrics.MeanSquaredLogarithmicError()])
+        model.compile(loss=tf.losses.MeanAbsoluteError(), optimizer=tf.optimizers.Adam(), metrics=TF_ERROR_METRICS)
 
     return model
 
 
-def main_run_linear_models(train_ds, val_ds, test_ds, data_props, max_backlooking=None, activation_funcs=['sigmoid', 'relu', 'tanh'], max_serach_iterations=200, NN_max_depth=3, MAX_EPOCHS=800, patience=25, model_name='linear', examples=None, return_permutation_importances=True, redo_serach_best_model=False):
+def main_run_linear_models(train_ds, val_ds, test_ds, data_props, max_backlooking=None, layer_type='dense', activation_funcs=['sigmoid', 'relu', 'tanh'], max_serach_iterations=200, NN_max_depth=3, MAX_EPOCHS=800, patience=25, model_name='linear', examples=None, return_permutation_importances=True, redo_serach_best_model=False):
     mlflow.set_experiment(model_name)
     experiment_date_time = int(datetime.datetime.now().strftime("%Y%m%d%H%M%S"))
+
+    flatten_input = True if layer_type == 'dense' else False
 
 
     def _extract_just_important_data_props(data_props):
@@ -159,6 +172,7 @@ def main_run_linear_models(train_ds, val_ds, test_ds, data_props, max_backlookin
     hp_param_dict = _hp_tranform_param_dict(param_dict=param_grid)
     hp_param_dict['model_name'] = model_name
     hp_param_dict['data_props'] = data_props
+    hp_param_dict['layer_type'] = layer_type
 
 
     def _optimize_objective(*args, **kwargs):
@@ -176,9 +190,10 @@ def main_run_linear_models(train_ds, val_ds, test_ds, data_props, max_backlookin
         verbose = kwargs.pop('verbose', 0)
         model_name = kwargs.pop('model_name', 'linear')
         data_props = kwargs.pop('data_props')
+        layer_type = kwargs.pop('layer_type', 'dense')
 
 
-        dataset = _get_prep_data(train_ds, val_ds, test_ds, flatten=True, keep_last_n_periods=backlooking_window)
+        dataset = _get_prep_data(train_ds, val_ds, test_ds, flatten=flatten_input, keep_last_n_periods=backlooking_window)
 
         now = datetime.datetime.now()
         date_time = str(now.strftime("%y%m%d%H%M%S"))
@@ -190,9 +205,10 @@ def main_run_linear_models(train_ds, val_ds, test_ds, data_props, max_backlookin
                       first_layer_nodes=first_layer_nodes,
                       last_layer_nodes=last_layer_nodes,
                       activation_func=activation_func,
-                      input_size=dataset['input_shape'],
+                      input_size=dataset['input_shape'] if layer_type == 'dense' else tuple(list(train_ds.element_spec[0].shape)[1:]),
                       output_size=dataset['output_shape'],
-                      backlooking_window=backlooking_window)
+                      backlooking_window=backlooking_window,
+                      layer_type=layer_type)
 
         model = createmodel(**kwargs)
         history, mlflow_additional_params = compile_and_fit(model=model, train=dataset['train_ds'], val=dataset['val_ds'],
@@ -207,6 +223,7 @@ def main_run_linear_models(train_ds, val_ds, test_ds, data_props, max_backlookin
         train_performance = dict(zip(model.metrics_names, evaluate_model(model=model, tf_data=dataset['train_ds'])))
         val_performance = dict(zip(model.metrics_names, evaluate_model(model=model, tf_data=dataset['val_ds'])))
         test_performance = dict(zip(model.metrics_names, evaluate_model(model=model, tf_data=dataset['test_ds'], mlflow_additional_params=mlflow_additional_params)))
+        mlflow_additional_params['data_props'] = data_props
 
         # Only save model if close to 15% best models
         try:
@@ -308,7 +325,10 @@ def main_run_linear_models(train_ds, val_ds, test_ds, data_props, max_backlookin
     if examples is not None:
         example_X = examples['X']
         periods = best_model_param['params']['backlooking_window']
-        example_X = tf.data.Dataset.from_tensors(np.reshape(example_X[:, -periods:, :], (example_X.shape[0], -1)))
+        if layer_type == 'dense':
+            example_X = tf.data.Dataset.from_tensors(np.reshape(example_X[:, -periods:, :], (example_X.shape[0], -1)))
+        else:
+            example_X = tf.data.Dataset.from_tensors(example_X)
         out['examples_pred_y'] = best_model.predict(example_X)
 
 
@@ -351,7 +371,7 @@ def main_run_linear_models(train_ds, val_ds, test_ds, data_props, max_backlookin
             sklearn_model = KerasRegressor(build_fn=best_model)
             sklearn_model.model = best_model
 
-            dataset = _get_prep_data(train_ds, val_ds, test_ds, flatten=True, keep_last_n_periods=best_model_param['params']['backlooking_window'])
+            dataset = _get_prep_data(train_ds, val_ds, test_ds, flatten=flatten_input, keep_last_n_periods=best_model_param['params']['backlooking_window'])
 
             out['feature_importance'] = {}
             for data_set in ['train', 'val']:
@@ -386,9 +406,33 @@ def main_run_linear_models(train_ds, val_ds, test_ds, data_props, max_backlookin
     # ToDo: Differnt Layer architectures
 
 
+def median_scaling(train_ds, val_ds, test_ds, y_col_idx):
+    train_X, train_y = tf.data.experimental.get_single_element(train_ds)
+    val_X, val_y = tf.data.experimental.get_single_element(val_ds)
+    test_X, test_y = tf.data.experimental.get_single_element(test_ds)
+    train_X, train_y = train_X.numpy(), train_y.numpy()
+    val_X, val_y = val_X.numpy(), val_y.numpy()
+    test_X, test_y = test_X.numpy(), test_y.numpy()
+
+    from sklearn import preprocessing
+    scaler_X = preprocessing.RobustScaler(with_centering=False, quantile_range=(0.02, 0.98)).fit(train_X.reshape((-1, train_X.shape[-1])))
+    #scaler_y = preprocessing.RobustScaler(with_centering=False, quantile_range=(0.02, 0.98)).fit(train_y[:, -1, :])
+    #train_y[:, 0, :] = scaler_y.transform(train_y[:, 0, :])
+    #val_y[:, 0, :] = scaler_y.transform(val_y[:, 0, :])
+    #test_y[:, 0, :] = scaler_y.transform(test_y[:, 0, :])
+    for i in range(train_X.shape[1]):
+        train_X[:, i, :] = scaler_X.transform(train_X[:, i, :])
+        val_X[:, i, :] = scaler_X.transform(val_X[:, i, :])
+        test_X[:, i, :] = scaler_X.transform(test_X[:, i, :])
+
+    train_ds = tf.data.Dataset.from_tensors((train_X, train_y))
+    val_ds = tf.data.Dataset.from_tensors((val_X, val_y))
+    test_ds = tf.data.Dataset.from_tensors((test_X, test_y))
+
+    return train_ds, val_ds, test_ds
 
 
-def run_model_acorss_time(data_obj, model_name, activation_funcs, y_col, max_serach_iterations=200, redo_serach_best_model=False, max_backlooking=None, NN_max_depth=3, MAX_EPOCHS=800, patience=25, example_len=5, example_list=[], export_results=False):
+def run_model_acorss_time(data_obj, model_name, activation_funcs, y_col, layer_type='dense', max_serach_iterations=200, redo_serach_best_model=False, max_backlooking=None, NN_max_depth=3, MAX_EPOCHS=800, patience=25, example_len=5, example_list=[], export_results=False):
 
     results_storage = {}
 
@@ -402,11 +446,12 @@ def run_model_acorss_time(data_obj, model_name, activation_funcs, y_col, max_ser
     for out in [data_obj['200000_201500'], data_obj['200100_201600'], data_obj['200200_201700'], data_obj['200300_201800'], data_obj['200400_201900'], data_obj['200500_202000']]:
         print('Time-step:', out['iter_step'])
         train_ds, val_ds, test_ds = data_obj.tsds_dataset(out='all', out_dict=out)
+        train_ds, val_ds, test_ds = median_scaling(train_ds, val_ds, test_ds, y_col_idx=out['columns_lookup']['X'][y_col])
         examples = data_obj.get_examples(example_len=example_len, example_list=example_list, y_col=y_col)
         examples['pred'] = {}
         data_props = data_obj.get_data_props()
 
-        results = main_run_linear_models(train_ds, val_ds, test_ds, data_props, max_backlooking=max_backlooking, activation_funcs=activation_funcs, max_serach_iterations=max_serach_iterations, NN_max_depth=NN_max_depth, MAX_EPOCHS=MAX_EPOCHS, patience=patience, model_name=model_name, examples=examples, redo_serach_best_model=redo_serach_best_model, return_permutation_importances=True)
+        results = main_run_linear_models(train_ds, val_ds, test_ds, data_props, max_backlooking=max_backlooking, layer_type=layer_type, activation_funcs=activation_funcs, max_serach_iterations=max_serach_iterations, NN_max_depth=NN_max_depth, MAX_EPOCHS=MAX_EPOCHS, patience=patience, model_name=model_name, examples=examples, redo_serach_best_model=redo_serach_best_model, return_permutation_importances=True)
         if results['status'] == 'ok':
             examples['pred'][model_name] = results['examples_pred_y']
 

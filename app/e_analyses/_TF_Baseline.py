@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 import datetime
+import matplotlib.pyplot as plt
 
 # Working directory must be the higher .../app folder
 if str(os.getcwd())[-3:] != 'app': raise Exception(f'Working dir must be .../app folder and not "{os.getcwd()}"')
@@ -55,8 +56,7 @@ def _collect_all_metrics(model, train_ds, val_ds, test_ds, mlflow_additional_par
 
     return pd.DataFrame({'train': train_performance, 'val': val_performance, 'test': test_performance})
 
-
-
+from app.e_analyses.a_tf_base import median_scaling
 
 
 
@@ -64,7 +64,8 @@ def run_model_acorss_time(data_obj, y_col, example_len=5, example_list=[], expor
     mlflow.set_experiment('baseline')
     experiment_date_time = int(datetime.datetime.now().strftime("%Y%m%d%H%M%S"))
 
-    error_storage = pd.DataFrame()
+    val_error_storage_all = pd.DataFrame()
+    test_error_storage_all = pd.DataFrame()
 
     def _reformat_DF(df, head):
         df = df.append(pd.Series(df.columns.tolist(), name='columns', index=df.columns.tolist()))
@@ -76,16 +77,21 @@ def run_model_acorss_time(data_obj, y_col, example_len=5, example_list=[], expor
     for out in [data_obj['200000_201500'], data_obj['200100_201600'], data_obj['200200_201700'], data_obj['200300_201800'], data_obj['200400_201900'], data_obj['200500_202000']]:
         print('Time-step:', out['iter_step'])
 
+        val_error_storage = []
         test_error_storage = []
 
         train_ds, val_ds, test_ds = data_obj.tsds_dataset(out='all', out_dict=out)
+
         examples = data_obj.get_examples(example_len=example_len, example_list=example_list, y_col=y_col)
         examples['pred'] = {}
         data_props = data_obj.get_data_props()
 
+        train_ds, val_ds, test_ds = median_scaling(train_ds, val_ds, test_ds, y_col_idx=out['columns_lookup']['X'][y_pred_col[0]])
+
         baseline1 = BaselineLastAvg(label_index=out['columns_lookup']['X'][y_pred_col[0]], periods=1)
         history, mlflow_additional_params = compile_and_fit(train=train_ds, val=val_ds, model=baseline1, MAX_EPOCHS=1, model_name=model_name)
         metrics = _collect_all_metrics(baseline1, train_ds, val_ds, test_ds, mlflow_additional_params, data_props)
+        val_error_storage.append(metrics['val'].rename('baseline_last'))
         test_error_storage.append(metrics['test'].rename('baseline_last'))
 
 
@@ -107,6 +113,7 @@ def run_model_acorss_time(data_obj, y_col, example_len=5, example_list=[], expor
                 best_avg_loss = loss
                 best_avg_periods = periods
         metrics = _collect_all_metrics(best_avg_model, train_ds, val_ds, test_ds, mlflow_additional_params, data_props)
+        val_error_storage.append(metrics['val'].rename(f'baseline_avg(t={best_avg_periods})'))
         test_error_storage.append(metrics['test'].rename(f'baseline_avg(t={best_avg_periods})'))
         print('######### Best Last Avg:', best_avg_periods, best_avg_loss)
 
@@ -125,14 +132,20 @@ def run_model_acorss_time(data_obj, y_col, example_len=5, example_list=[], expor
         baseline0 = BaselineStaticValue(value=best_val_value)
         history, mlflow_additional_params = compile_and_fit(train=train_ds, val=val_ds, model=baseline0, MAX_EPOCHS=1, model_name=model_name)
         metrics = _collect_all_metrics(baseline0, train_ds, val_ds, test_ds, mlflow_additional_params, data_props)
+        val_error_storage.append(metrics['val'].rename(f'baseline_static_value({round(best_val_value, 2)})'))
         test_error_storage.append(metrics['test'].rename(f'baseline_static_value({round(best_val_value, 2)})'))
+
+        val_error = pd.DataFrame(val_error_storage).transpose()
+        val_error = _reformat_DF(df=val_error, head=out['iter_step'])
+        val_error_storage_all = pd.concat([val_error_storage_all.sort_index(), val_error.sort_index()], axis=1)
 
         test_error = pd.DataFrame(test_error_storage).transpose()
         test_error = _reformat_DF(df=test_error, head=out['iter_step'])
-        error_storage = pd.concat([error_storage.sort_index(), test_error.sort_index()], axis=1)
+        test_error_storage_all = pd.concat([test_error_storage_all.sort_index(), test_error.sort_index()], axis=1)
 
         if export_results != False:
-            error_storage.to_csv(export_results + f'results_baseline_models.csv')
+            val_error_storage_all.to_csv(export_results + f'results_baseline_models_val.csv')
+            test_error_storage_all.to_csv(export_results + f'results_baseline_models_test.csv')
 
 
 
@@ -170,8 +183,8 @@ if __name__ == '__main__':
     append_data_quality_col = False
 
     # feature engerneeing
-    features = ['lev_thi']  # just lev & thi columns
-    # features = 'all'  # all columns
+    # features = ['lev_thi']  # just lev & thi columns
+    features = 'all'  # all columns
 
     # y prediction column
     y_pred_col = ['y_eps pct']
@@ -245,8 +258,8 @@ if __name__ == '__main__':
                              test_time_steps=qrt_multiplier, shuffle=True)
     # data.single_time_rolling(val_time_steps=1, test_time_steps=1, shuffle=True)
 
-    #data.normalize(method='no')
-    data.normalize(method='block')
+    data.normalize(method='no')
+    # data.normalize(method='block')
     #data.normalize(method='time')
     # data.normalize(method='set')
 

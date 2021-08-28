@@ -121,17 +121,20 @@ data.export_to_excel()
 **prediction.py** ([in app/d_prediction](app/d_prediction/prediction.py)) executes all models:
 1. baseline models *([see code here](app/d_prediction/baseline_models.py))*
     - Baseline_last_value: prediction = last quarter value
-    - Baseline_4last_value: prediction = value 4 quarters ago
+    - Baseline_4last_value: prediction = value 4 periods ago
+    - Baseline_avg_last_value: prediction = average x periods
 2. statistical models *([see code here](app/d_prediction/statistical_models.py))*
-    - linear
-    - multi-dense: multiple linear layers
-    - ToDo: logistic model
-3. Advanced Statisctical / ML models *([see code here](app/d_prediction/ML_xxx_models.py))*
-    - ToDo: ARIMA / SARIMA
-    - ToDo: Holt-Winters
-    - ToDo: Ranodm Forest/decision Tree
-    - ToDo: XGBoost/LightGBM
+    - linear regression & just features from literature (just one layer)
+         - without OOS fitting (StatsModels)
+         - with OOS fitting (TensorFlow)
+    - best activation function & multi-layer (multi-dense: multiple dense layers)
+         - just features from literature
+         - all features
+3. ML models *([see code here](app/d_prediction/ML_xxx_models.py))*
+    - ToDo: ARIMA / SARIMA (/Holt-Winters)
+    - ToDo: XGBoost/LightGBM (/Ranodm Forest/decision Tree)
 4. Deep Leraning / Neural Networks *([see code here](app/d_prediction/NN_tensorflow_models.py))*
+    - Multi-Dense (= see 2.2)
     - LSTM
     - ??? MLP / CNN / RNN / GRU
 ```python

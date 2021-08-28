@@ -13,8 +13,8 @@ if __name__ == '__main__':  # must be in if condition because I am pusing parall
     my.convenience_settings()
 
     ### run tensorboard
-    # MLFLOW_TRACKING_URI = 'file:' + '/Users/vanalmsick/Workspace/MasterThesis/cache/MLflow'  # with local tracking serveer
-    MLFLOW_TRACKING_URI = 'http://0.0.0.0:5000'  # with remote tracking server with registry
+    MLFLOW_TRACKING_URI = 'file:' + '/Users/vanalmsick/Workspace/MasterThesis/cache/MLflow'  # with local tracking serveer
+    #MLFLOW_TRACKING_URI = 'http://0.0.0.0:5000'  # with remote tracking server with registry
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 
 
@@ -102,20 +102,87 @@ if __name__ == '__main__':  # must be in if condition because I am pusing parall
     #data.filter_features(just_include=X_cols)
     data.filter_y(just_include=y_col)
 
-    def key_value_table(df, keys=['ric', 'data_year', 'data_qrt'], file='AWS_AutoML_import.csv'):
-        import hashlib
-        new_data =[]
-        cols = [col for col in df.columns.tolist() if col not in keys]
-        with open(file, 'a') as f:
-            f.write('metric_name,timestamp,metric_value,ric\n')
-            for idx, row in df.iterrows():
-                for col in cols:
-                    comp = row[keys[0]]
-                    comp = str(int(hashlib.sha1(comp.encode("utf-8")).hexdigest(), 16) % (10 ** 8))
-                    print([comp] + [int(row[keys[1]])] + [col] + [row[col]])
-                    f.write((str([col])[1:-1] + ',' + str(int(row[keys[1]])) + '-01-01,' + str(row[col]) + ',' + str(comp)).replace(' ','') + '\n')
-        return new_data
+
+    # Test on all data time-steps
+    for out in [data['200000_201700'], data['200100_201800'], data['200200_201900'], data['200300_202000']]: #, data['200400_202000']
+        print(out['iter_step'])
+        train, val, test = data.df_dataset(out='all', out_dict=out)
+        train_X, train_y = train
+
+        from sklearn.preprocessing import RobustScaler
+
+        transformer_X = RobustScaler().fit(train_X)
+        train_X = pd.DataFrame(transformer_X.transform(train_X), columns=train_X.columns)
+
+        transformer_y = RobustScaler().fit(train_y)
+        train_y = transformer_y.transform(train_y)
+
+        val_X, val_y = val
+        test_X, test_y = test
+        oos_X = val_X.append(test_X)
+        oos_X = pd.DataFrame(transformer_X.transform(oos_X), columns=oos_X.columns)
+        oos_y = np.append(val_y, test_y).reshape(-1, 1)
+        oos_y = transformer_y.transform(oos_y)
+
+        print('Train size:', len(train_X))
+        print('Val size:', len(val_X))
+        print('Test size:', len(test_X))
+        print('OOS size:', len(oos_X))
+
+        from xgboost import XGBRegressor
+        from sklearn.model_selection import RandomizedSearchCV
+        from sklearn.model_selection import KFold
+        from sklearn.model_selection import cross_val_score
+
+        model = XGBRegressor(objective='reg:squarederror', n_estimators=1000)
+        #model.fit(train_X, train_y)
+        #kfold = KFold(n_splits=5) #, random_state=42
+        #results = cross_val_score(model, train_X, train_y, cv=kfold)
+
+        # Create parameter grid
+        parameters = {"learning_rate": [0.1, 0.01, 0.001],
+                      "gamma": [0.01, 0.1, 0.3, 0.5, 1, 1.5, 2],
+                      "max_depth": [2, 4, 7, 10],
+                      "colsample_bytree": [0.3, 0.6, 0.8, 1.0],
+                      "subsample": [0.2, 0.4, 0.5, 0.6, 0.7],
+                      "reg_alpha": [0, 0.5, 1],
+                      "reg_lambda": [1, 1.5, 2, 3, 4.5],
+                      "min_child_weight": [1, 3, 5, 7],
+                      "n_estimators": [100, 250, 500, 1000]}
+
+        # Create RandomizedSearchCV Object
+        xgb_rscv = RandomizedSearchCV(model, param_distributions=parameters, #scoring="f1_micro",
+                                      cv=7, verbose=3, random_state=40)
+
+        # Fit the model
+        model_xgboost = xgb_rscv.fit(train_X, train_y, eval_metric="mae", eval_set=[(val_X, val_y)], verbose=False)
+
+        print('===================================================================')
+
+        print("Learning Rate: ", model_xgboost.best_estimator_.get_params()["learning_rate"])
+        print("Gamma: ", model_xgboost.best_estimator_.get_params()["gamma"])
+        print("Max Depth: ", model_xgboost.best_estimator_.get_params()["max_depth"])
+        print("Subsample: ", model_xgboost.best_estimator_.get_params()["subsample"])
+        print("Max Features at Split: ", model_xgboost.best_estimator_.get_params()["colsample_bytree"])
+        print("Alpha: ", model_xgboost.best_estimator_.get_params()["reg_alpha"])
+        print("Lamda: ", model_xgboost.best_estimator_.get_params()["reg_lambda"])
+        print("Minimum Sum of the Instance Weight Hessian to Make a Child: ", model_xgboost.best_estimator_.get_params()["min_child_weight"])
+        print("Number of Trees: ", model_xgboost.best_estimator_.get_params()["n_estimators"])
+
+        print("\nTrain Score:", model_xgboost.score(train_X, train_y))
+        print("\nOOS Score:", model_xgboost.score(oos_X, oos_y))
+
+        print('===================================================================')
 
 
-    key_value_table(df_to_use)
+        examples = data.get_examples(example_len=5, example_list=[])
+        examples['pred'] = {}
+        preds = []
+        for example in examples['X']:
+            preds.append(float(model_xgboost.predict(example)))
+        examples['pred']['XGBoost'] = np.reshape(preds, (-1, 1))
+
+        from app.d_prediction.prediction import plot
+        plot(examples_dict=examples, normalization=False)
+
 
