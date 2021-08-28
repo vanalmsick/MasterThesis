@@ -40,7 +40,40 @@ def just_good_features(train_X, train_y=None):
     return columns
 
 
+def _get_prep_data(train_ds, val_ds, test_ds, flatten=False, keep_last_n_periods='all'):
+    # seperate tfds to np
+    train_X, train_y = tf.data.experimental.get_single_element(train_ds)
+    val_X, val_y = tf.data.experimental.get_single_element(val_ds)
+    test_X, test_y = tf.data.experimental.get_single_element(test_ds)
+    n_train = train_X.shape[0]
+    n_val = val_X.shape[0]
+    n_test = test_X.shape[0]
 
+    if keep_last_n_periods != 'all':  # reduce periods
+        train_X = train_X[:, -keep_last_n_periods:, :]
+        val_X = val_X[:, -keep_last_n_periods:, :]
+        test_X = test_X[:, -keep_last_n_periods:, :]
+
+    if flatten:
+        train_y = tf.squeeze(train_y)
+        val_y = tf.squeeze(val_y)
+        test_y = tf.squeeze(test_y)
+        train_X = tf.reshape(train_X, (n_train, -1))
+        val_X = tf.reshape(val_X, (n_val, -1))
+        test_X = tf.reshape(test_X, (n_test, -1))
+
+
+    # Output / Return
+    out = dict(train_ds=tf.data.Dataset.from_tensors((train_X, train_y)),
+               val_ds=tf.data.Dataset.from_tensors((val_X, val_y)),
+               test_ds=tf.data.Dataset.from_tensors((test_X, test_y)),
+               train_X=train_X, train_y=train_y,
+               val_X=val_X, val_y=val_y,
+               test_X=test_X, test_y=test_y,
+               input_shape=train_X.shape[-1],
+               output_shape=1 if len(set(train_y.shape)) == 1 else train_y.shape[-1])
+
+    return out
 
 
 
@@ -114,40 +147,7 @@ def main_run_linear_models(train_ds, val_ds, test_ds, data_props, max_backlookin
         return kwargs
 
 
-    def _get_prep_data(train_ds, val_ds, test_ds, flatten=False, keep_last_n_periods='all'):
-        # seperate tfds to np
-        train_X, train_y = tf.data.experimental.get_single_element(train_ds)
-        val_X, val_y = tf.data.experimental.get_single_element(val_ds)
-        test_X, test_y = tf.data.experimental.get_single_element(test_ds)
-        n_train = train_X.shape[0]
-        n_val = val_X.shape[0]
-        n_test = test_X.shape[0]
 
-        if keep_last_n_periods != 'all':  # reduce periods
-            train_X = train_X[:, -keep_last_n_periods:, :]
-            val_X = val_X[:, -keep_last_n_periods:, :]
-            test_X = test_X[:, -keep_last_n_periods:, :]
-
-        if flatten:
-            train_y = tf.squeeze(train_y)
-            val_y = tf.squeeze(val_y)
-            test_y = tf.squeeze(test_y)
-            train_X = tf.reshape(train_X, (n_train, -1))
-            val_X = tf.reshape(val_X, (n_val, -1))
-            test_X = tf.reshape(test_X, (n_test, -1))
-
-
-        # Output / Return
-        out = dict(train_ds=tf.data.Dataset.from_tensors((train_X, train_y)),
-                   val_ds=tf.data.Dataset.from_tensors((val_X, val_y)),
-                   test_ds=tf.data.Dataset.from_tensors((test_X, test_y)),
-                   train_X=train_X, train_y=train_y,
-                   val_X=val_X, val_y=val_y,
-                   test_X=test_X, test_y=test_y,
-                   input_shape=train_X.shape[-1],
-                   output_shape=1 if len(set(train_y.shape)) == 1 else train_y.shape[-1])
-
-        return out
 
 
 
@@ -432,16 +432,19 @@ def median_scaling(train_ds, val_ds, test_ds, y_col_idx):
     return train_ds, val_ds, test_ds
 
 
+
+def _reformat_DF(df, head):
+    df = df.append(pd.Series(df.columns.tolist(), name='columns', index=df.columns.tolist()))
+    df = df.append(pd.Series([head] * len(df.columns.tolist()), name='time_step', index=df.columns.tolist()))
+    df.columns = [f'{head}_{col}' for col in df.columns.tolist()]
+    return df
+
+
+
+
 def run_model_acorss_time(data_obj, model_name, activation_funcs, y_col, layer_type='dense', max_serach_iterations=200, redo_serach_best_model=False, max_backlooking=None, NN_max_depth=3, MAX_EPOCHS=800, patience=25, example_len=5, example_list=[], export_results=False):
 
     results_storage = {}
-
-    def _reformat_DF(df, head):
-        df = df.append(pd.Series(df.columns.tolist(), name='columns', index=df.columns.tolist()))
-        df = df.append(pd.Series([head] * len(df.columns.tolist()), name='time_step', index=df.columns.tolist()))
-        df.columns = [f'{head}_{col}' for col in df.columns.tolist()]
-        return df
-
 
     for out in [data_obj['200000_201500'], data_obj['200100_201600'], data_obj['200200_201700'], data_obj['200300_201800'], data_obj['200400_201900'], data_obj['200500_202000']]:
         print('Time-step:', out['iter_step'])

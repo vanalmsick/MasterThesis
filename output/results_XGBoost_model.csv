@@ -1,0 +1,16 @@
+,200000_201500,200100_201600,200200_201700,200300_201800,200400_201900,200500_202000
+iter_step,200000_201500,200100_201600,200200_201700,200300_201800,200400_201900,200500_202000
+backlooking_period,3,3,2,2,4,1
+booster,gbtree,gbtree,gbtree,gbtree,gbtree,gbtree
+colsample_bytree,0.65,0.55,0.95,0.6,0.85,0.95
+eta,0.275,0.325,0.45,0.375,0.275,0.225
+eval_metric,mae,mae,mae,mae,mae,mae
+gamma,0.65,0.65,0.5,0.55,0.55,0.85
+max_depth,5,7,7,2,5,9
+min_child_weight,3,5,6,3,5,5
+n_estimators,962,675,592,315,562,216
+nthread,,,,,,
+seed,42,42,42,42,42,42
+silent,0,0,0,0,0,0
+subsample,0.75,0.95,0.6,0.7,0.8,0.85
+tree_method,exact,exact,exact,exact,exact,exact
