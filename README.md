@@ -1,5 +1,8 @@
-# MasterThesis
+# Master Thesis: Predicting Company Earnings with AI Techniques
 Predicting company earnings (Net income / ROE / dividends per share) with AI from company fundamentals (B/S, I/S, CF/S, ShrE/S).
+
+## Abstract  
+Corporate earnings prediction has always been an important subject for practitioners and accounting & investment research. A large body of prior re-search has examined the EPS forecasting accuracy of traditional methods, name-ly using regressions and time-series moving average models. With increasing data availability and computing power Artificial Intelligence (AI) techniques have gained popularity in recent years. Those techniques promise to inde-pendently learn subtle and non-linear relationships and interaction effects in high-dimensional data, even without explicit theoretical guidance, helping un-cover new information from the financial statements beyond the extant models. However, literature applying AI techniques to predict corporate earnings using fundamental data remains very limited and results often contradict each other. This thesis leverages one of the largest fundamental datasets from Reuters Revinitv along a time-series of over 20 years of data to compare Traditional against AI earnings prediction techniques. On this common dataset different techniques' accuracy can be evaluated and compared against one and another. Additionally, the very limited number of literature related to AI earnings predic-tion techniques can be validated. The findings are ?????????.
 
 ## Data-Flow/Process-Graphic
 The approach is to apply best practices with the most widely used (and best considered) software and tools:
