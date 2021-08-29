@@ -111,7 +111,7 @@ def createmodel(n_layers, first_layer_nodes, last_layer_nodes, activation_func, 
             else:
                 raise Exception(f'Unknown layer type {layer_type}')
 
-    # Finally, the output layer should have a single node in binary classification
+    # Finally, the results layer should have a single node in binary classification
     model.add(Dense(output_size, activation=activation_func))
 
     if compile:
@@ -343,7 +343,7 @@ def main_run_linear_models(train_ds, val_ds, test_ds, data_props, max_backlookin
         dataset = _get_prep_data(train_ds, val_ds, test_ds, flatten=True, keep_last_n_periods=best_model_param['params']['backlooking_window'])
 
         # get p-values
-        import app.e_analyses.my_custom_pvalue_calc as my_p_lib
+        import app.d_prediction.my_custom_pvalue_calc as my_p_lib
 
         out['p_values'] = {}
         for data_set in ['train', 'val', 'test']:
@@ -396,14 +396,6 @@ def main_run_linear_models(train_ds, val_ds, test_ds, data_props, max_backlookin
     return out
 
 
-    # ToDo: Use Paper Factors only
-    # ToDo: Add LogisticRegression -> Linear: linear() Logit: sigmod() activation functoion
-
-    # ToDo: Feature selection - feature importance score
-    # ToDo: Add normalize GridSearch
-    # ToDo: Add other normalization techniques
-    # ToDo: Add other parameters for GridSearch
-    # ToDo: Differnt Layer architectures
 
 
 def median_scaling(train_ds, val_ds, test_ds, y_col_idx):

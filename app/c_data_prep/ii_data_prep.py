@@ -97,7 +97,7 @@ class data_prep:
         #    df = pd.concat([df, tmp], axis=1)
         #self.data = df.drop(columns=cat_cols)
         self.data = df
-        # ToDo: Implement real NaN handling
+
         #self.data = self.data.fillna(self.data.mean().fillna(0))
         self.dummy_col_dict = dummy_dict
 
@@ -220,7 +220,7 @@ class data_prep:
         return norm_param
 
     def _get_normalization_param(self, df, idx_dict):
-        # ToDo: Check if Normalization is OOS
+        # Check if Normalization is OOS
         print('\nCaching indices/iterators and normalization parameters:')
         norm_get__all__ = {}
         norm_get = {}
@@ -587,7 +587,6 @@ class data_prep:
                 i += 1
             """
 
-            # ToDo: There are entire datasets with 500 tasks none resulting in long enough data
             train_col_list = list(filter(None, train_col_list))
 
             train_X = np.asarray(train_X)
@@ -1149,13 +1148,6 @@ class data_prep:
 
 
 if __name__ == '__main__':
-    # ToDo: tfds data generator
-    # ToDo: data example/graph
-    # ToDo: shuffle data
-    # ToDo: add lagged variables
-    # ToDo: outlier normalization
-    # ToDo: rolling block step size of iteration
-    # ToDo: add block normalization
 
     # Working directory must be the higher .../app folder
     from app.z_helpers import helpers as my

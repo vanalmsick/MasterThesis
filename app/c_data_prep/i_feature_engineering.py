@@ -65,14 +65,14 @@ def lev_thiagaranjan_signs(df_abs, df_pct, iter_col, company_col):
     new_df['4_RnD'] = df_pct['randd_avg'] - df_pct['randd']
     new_df['5_Gross Margin'] = df_pct['sales'] - df_pct['grossmargin']
     new_df['6_Sales & Admin. Exp.'] = df_pct['sga'] - df_pct['sales']
-    # ToDo: Prov doubt accounts no/little data
+    # Prov doubt accounts no/little data
     #new_df['7_prov doubt rec'] = df_pct['receivables'] - df_pct['provdoubtacct']
-    # ToDo: 8_eff tax: df['tr_f_ebit'] tr_f_inctaxratepct
+    # 8_eff tax: df['tr_f_ebit'] tr_f_inctaxratepct
     new_df['9_Order Backlog'] = df_pct['sales'] - df_pct['orderbacklog'].fillna(0)
     new_df['10_Labor Force'] = ((df_abs['sales_sft_1'] / df_abs['employeenum_sft_1']) - (df_abs['sales'] / df_abs['employeenum'])) / df_abs['sales_sft_1'] / df_abs['employeenum_sft_1']
     new_df.loc[df_abs['fifovslifo'] < 0, '11_FIFO/LIFO dummy'] = 1
     new_df['11_FIFO/LIFO dummy'].fillna(0, inplace=True)
-    # ToDo: 12_Audit dummy
+    # 12_Audit dummy
 
     return new_df
 
@@ -89,7 +89,7 @@ def ou_pennmann_signs(df_abs, df_pct, iter_col, company_col):
     new_df['12_sales'] = df_pct['sales']
     new_df['13_depreciation'] = df_pct['depreciation']
     new_df['14_div per share'] = df_abs['dividendperstock'] - df_abs['dividendperstock_sft_1']
-    # ToDo:DeprToPPEsomehwo missing in data
+    # DeprToPPEsomehwo missing in data
     #new_df['16_depr to ppe'] = df_pct['deprttoppe']
     new_df['17_ROE'] = df_abs['roe']
     new_df['18_ROE pct chg'] = df_pct['roe']
@@ -114,7 +114,7 @@ def ou_pennmann_signs(df_abs, df_pct, iter_col, company_col):
 
 def xue_zhang_signs(df_abs, df_pct, iter_col, company_col, industry_col):
     new_df = df_abs[[company_col] + [industry_col] + iter_col].copy()
-    # ToDo: Binarize by  comparing against industry avg
+    # Binarize by  comparing against industry avg
     new_df['1_profit margin'] = df_pct['netprofitmargin']
     new_df['2_ROA'] = df_abs['roa']
     new_df['3_ROA chg'] = df_pct['roa']
@@ -282,7 +282,6 @@ def feature_engerneeing(dataset, comp_col, time_cols, industry_col, all_features
     df_all = df_all.replace(['inf', 'nan', '-inf', np.inf, -np.inf, np.nan], 0)
     df_all = pd.DataFrame(np.nan_to_num(df_all), columns=df_all.columns)
 
-    # ToDo: What do in the end if NaN after feature engerneeing? drop or fill?
     df_all = df_all.dropna()
 
     # Drop outlioers

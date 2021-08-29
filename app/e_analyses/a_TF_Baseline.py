@@ -1,18 +1,15 @@
 import os
-import warnings
 
 import mlflow.keras
 import numpy as np
 import pandas as pd
 import tensorflow as tf
 import datetime
-import matplotlib.pyplot as plt
 
 # Working directory must be the higher .../app folder
 if str(os.getcwd())[-3:] != 'app': raise Exception(f'Working dir must be .../app folder and not "{os.getcwd()}"')
 from app.z_helpers import helpers as my_helpers
 
-from app.e_analyses.a_tf_base import run_model_acorss_time
 from app.d_prediction.NN_tensorflow_models import compile_and_fit, evaluate_model
 
 class BaselineLastAvg(tf.keras.Model):
@@ -56,7 +53,7 @@ def _collect_all_metrics(model, train_ds, val_ds, test_ds, mlflow_additional_par
 
     return pd.DataFrame({'train': train_performance, 'val': val_performance, 'test': test_performance})
 
-from app.e_analyses.a_tf_base import median_scaling
+from app.d_prediction.a_tf_base import median_scaling
 
 
 
@@ -194,7 +191,7 @@ if __name__ == '__main__':
 
     # results location
     # export_results = False
-    export_results = '/Users/vanalmsick/Workspace/MasterThesis/output/'
+    export_results = '/Users/vanalmsick/Workspace/MasterThesis/results/'
 
     model_name = 'dense_lit_best'
 

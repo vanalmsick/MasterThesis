@@ -1,16 +1,12 @@
 import os
-import warnings
 
 import mlflow.keras
-import numpy as np
-import pandas as pd
-import tensorflow as tf
 
 # Working directory must be the higher .../app folder
 if str(os.getcwd())[-3:] != 'app': raise Exception(f'Working dir must be .../app folder and not "{os.getcwd()}"')
 from app.z_helpers import helpers as my_helpers
 
-from app.e_analyses.a_tf_base import run_model_acorss_time
+from app.d_prediction.a_tf_base import run_model_acorss_time
 
 
 
@@ -57,10 +53,11 @@ if __name__ == '__main__':
     backlooking_yeras = 4
 
     # results location
-    export_results = False
-    export_results = '/Users/vanalmsick/Workspace/MasterThesis/output/'
+    # export_results = False
+    export_results = '/Users/vanalmsick/Workspace/MasterThesis/results/'
 
-    model_name = 'dense_lit_best'
+    model_name = 'dense_lit_linear'
+
 
     ###########################################################################
 
@@ -123,7 +120,7 @@ if __name__ == '__main__':
     # data.single_time_rolling(val_time_steps=1, test_time_steps=1, shuffle=True)
 
     data.normalize(method='no')
-    #data.normalize(method='block')
+    # data.normalize(method='block')
     #data.normalize(method='time')
     # data.normalize(method='set')
 
@@ -136,11 +133,12 @@ if __name__ == '__main__':
 
     ############# RUN ALL MODELS ACROSS TIME #############
 
-    run_model_acorss_time(data_obj=data, max_serach_iterations=250, MAX_EPOCHS=1000, patience=25, example_len=5, example_list=[], y_col=y_pred_col[0], export_results=export_results,
+    run_model_acorss_time(data_obj=data, max_serach_iterations= 4 * 4, MAX_EPOCHS=1000, patience=8, example_len=5, example_list=[], y_col=y_pred_col[0], export_results=export_results,
                           redo_serach_best_model=True,
                           model_name=model_name,
-                          activation_funcs=['linear', 'sigmoid', 'tanh', 'relu', 'elu', 'selu'],
-                          NN_max_depth=10)
+                          activation_funcs=['linear'],
+                          max_backlooking=1,
+                          NN_max_depth=1)
 
 
     ######################################################

@@ -120,26 +120,18 @@ ds_train, ds_val, ds_test = data.tsds_dataset(out='all', out_dict=None)
 data.export_to_excel()
 ```
   
-## 4. Prediction *([folder: d](app/d_prediction))*
-**prediction.py** ([in app/d_prediction](app/d_prediction/prediction.py)) executes all models:
-1. baseline models *([see code here](app/d_prediction/baseline_models.py))*
-    - Baseline_last_value: prediction = last quarter value
-    - Baseline_4last_value: prediction = value 4 periods ago
-    - Baseline_avg_last_value: prediction = average x periods
-2. statistical models *([see code here](app/d_prediction/statistical_models.py))*
-    - linear regression & just features from literature (just one layer)
-         - without OOS fitting (StatsModels)
-         - with OOS fitting (TensorFlow)
-    - best activation function & multi-layer (multi-dense: multiple dense layers)
-         - just features from literature
-         - all features
-3. ML models *([see code here](app/d_prediction/ML_xxx_models.py))*
-    - ToDo: ARIMA / SARIMA (/Holt-Winters)
-    - ToDo: XGBoost/LightGBM (/Ranodm Forest/decision Tree)
-4. Deep Leraning / Neural Networks *([see code here](app/d_prediction/NN_tensorflow_models.py))*
-    - Multi-Dense (= see 2.2)
-    - LSTM
-    - ??? MLP / CNN / RNN / GRU
-```python
-# ToDo: Add code snip hwo to execute when all models coded and optimal parameters choosen
-```
+## 4. Analyzes/Prediction *([folder: e](app/e_analyses))*
+**All models:**
+1. baseline models *([code](app/e_analyses/a_TF_Baseline.py) / [validation results](results/results_baseline_models_val.csv) / [test results](results/results_baseline_models_test.csv) / [all runs](results/results_baseline_models_search.csv))*
+    - last value: prediction = last period value
+    - average value: prediction = average of n last periods (best n determined on validation dataset)
+    - static value: prediction = value x (best x determined on validation dataset)
+2. regression *([code](app/e_analyses/b_TF_LiteratureFeatures_Linear.py) / [results](results/results_dense_lit_linear_error.csv) / [p-values](results/results_dense_lit_linear_pvalues.csv)  / [coefficients](results/results_dense_lit_linear_coef.csv))*
+    - replication of Lev & Thiagarajan (1993)
+3. Machine Learning: XGBoost *([code](app/e_analyses/d_XGBoost.py) / [results](results/results_XGBoost_error.csv) / [best models](results/results_XGBoost_model.csv) / [all runs](results/results_XGBoost_search.csv))*
+4. Neural Networks
+    - Multi-Layer-Dense: 
+      - just using Lev & Thiagarajan's (1993) features *([code](app/e_analyses/e_TF_LiteratureFeatures_Best.py) / [results](results/results_dense_lit_best_error.csv) / [best models](results/results_dense_lit_best_model.csv) / [all runs](results/results_dense_lit_best_search.csv))*
+      - all features *([code](app/e_analyses/e_TF_AllFeatures_Best.py) / [results](results/results_dense_all_best_error.csv) / [best models](results/results_dense_all_best_model.csv) / [all runs](results/results_dense_all_best_search.csv))*
+    - LSTM *([code](app/e_analyses/f_TF_LSTM.py) / [results](results/results_lstm_all_error.csv) / [best models](results/results_lstm_all_model.csv) / [all runs](results/results_lstm_all_search.csv))*
+   

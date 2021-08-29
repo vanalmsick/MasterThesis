@@ -167,7 +167,7 @@ if __name__ == '__main__':  # must be in if condition because I am pusing parall
                 coef['Regression Model'] = regression_name
                 best_model_coef_summary = pd.concat((best_model_coef_summary, coef), axis=1)
 
-        my.word_regression_table(model=regr, X=train_X, y=pd.Series(train_y.squeeze(), name='y_eps'), output_file=f"/Users/vanalmsick/Workspace/MasterThesis/output/regression_lin_LevThi-{out['iter_step']}.docx", title=None)
+        my.word_regression_table(model=regr, X=train_X, y=pd.Series(train_y.squeeze(), name='y_eps'), output_file=f"/results/regression_lin_LevThi-{out['iter_step']}.docx", title=None)
 
 
         #examples = data.get_examples(example_len=5, example_list=[])
@@ -178,6 +178,6 @@ if __name__ == '__main__':  # must be in if condition because I am pusing parall
         #plot(examples_dict=examples, normalization=False)
 
     p_value_summary.columns = pd.MultiIndex.from_product([["Regression Model"], p_value_summary.columns])
-    with pd.ExcelWriter('/Users/vanalmsick/Workspace/MasterThesis/output/regression_lin_LevThi-compare.xlsx') as writer:
+    with pd.ExcelWriter('/results/regression_lin_LevThi-compare.xlsx') as writer:
         p_value_summary.to_excel(writer, sheet_name='P Values - All models')
         best_model_coef_summary.to_excel(writer, sheet_name=f'Coef Values - {best_model}')

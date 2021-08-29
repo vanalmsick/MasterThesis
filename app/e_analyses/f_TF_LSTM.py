@@ -1,16 +1,12 @@
 import os
-import warnings
 
 import mlflow.keras
-import numpy as np
-import pandas as pd
-import tensorflow as tf
 
 # Working directory must be the higher .../app folder
 if str(os.getcwd())[-3:] != 'app': raise Exception(f'Working dir must be .../app folder and not "{os.getcwd()}"')
-from app.z_helpers import helpers as my_helpers
 
-from app.e_analyses.a_tf_base import run_model_acorss_time
+from app.z_helpers import helpers as my_helpers
+from app.d_prediction.a_tf_base import run_model_acorss_time
 
 
 
@@ -47,8 +43,8 @@ if __name__ == '__main__':
     append_data_quality_col = False
 
     # feature engerneeing
-    features = ['lev_thi']  # just lev & thi columns
-    # features = 'all'  # all columns
+    # features = ['lev_thi']  # just lev & thi columns
+    features = 'all'  # all columns
 
     # y prediction column
     y_pred_col = ['y_eps pct']
@@ -58,9 +54,9 @@ if __name__ == '__main__':
 
     # results location
     # export_results = False
-    export_results = '/Users/vanalmsick/Workspace/MasterThesis/output/'
+    export_results = '/Users/vanalmsick/Workspace/MasterThesis/results/'
 
-    model_name = 'dense_lit_linear'
+    model_name = 'lstm_all'
 
 
     ###########################################################################
@@ -131,18 +127,28 @@ if __name__ == '__main__':
     data.compute()
     print(data)
 
-    data.filter_features(just_include=['1_Inventory', '3_CAPX', '4_RnD', '5_Gross Margin', '6_Sales & Admin. Exp.', '9_Order Backlog', '10_Labor Force', '11_FIFO/LIFO dummy'] + y_pred_col)
     data.filter_y(just_include=y_pred_col)
 
 
     ############# RUN ALL MODELS ACROSS TIME #############
 
-    run_model_acorss_time(data_obj=data, max_serach_iterations= 4 * 4, MAX_EPOCHS=1000, patience=8, example_len=5, example_list=[], y_col=y_pred_col[0], export_results=export_results,
+    #out = data['200300_201800']
+    #col_finding_data = data.df_dataset(out_dict=out)[0]
+
+    #filter_cols = col_finding_data[0].columns.tolist()  # all columns
+    #filter_cols = just_good_features(*col_finding_data)
+    #print(f'Reduced columns to {len(filter_cols)} (because of high corr / VIF / very low variance):', filter_cols)
+
+    #data.filter_features(just_include=filter_cols)
+
+
+
+    run_model_acorss_time(data_obj=data, max_serach_iterations=250, MAX_EPOCHS=2000, patience=50, example_len=5, example_list=[], y_col=y_pred_col[0], export_results=export_results,
                           redo_serach_best_model=True,
                           model_name=model_name,
-                          activation_funcs=['linear'],
-                          max_backlooking=1,
-                          NN_max_depth=1)
+                          layer_type='lstm',
+                          activation_funcs=['linear', 'sigmoid', 'tanh', 'relu', 'elu', 'selu'],
+                          NN_max_depth=10)
 
 
     ######################################################

@@ -114,7 +114,7 @@ def get_handpicked_dataset():
                         df['data_year'] = df['data_date'].str[:4].astype(int)
                         df['data_month'] = df['data_date'].str[5:7].astype(int)
                         df['data_day'] = df['data_date'].str[8:10].astype(int)
-                        # ToDo: fix wrong quarters
+
                         df_date = df['data_date'].str[:10]
                         df_date = dt.datetime.strptime(df_date, '%y-%m-%d') + dt.timedelta(days=20)
                         df_qrt = (df_date.month + 2) // 3 - 1

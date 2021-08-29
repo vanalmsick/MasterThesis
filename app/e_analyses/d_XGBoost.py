@@ -1,22 +1,19 @@
 import os
-import warnings
 
 import mlflow.keras
 import numpy as np
 import pandas as pd
-import tensorflow as tf
 
 # Working directory must be the higher .../app folder
 if str(os.getcwd())[-3:] != 'app': raise Exception(f'Working dir must be .../app folder and not "{os.getcwd()}"')
 
 from app.z_helpers import helpers as my_helpers
-from app.e_analyses.a_tf_base import just_good_features, run_model_acorss_time, median_scaling, _get_prep_data, _reformat_DF
+from app.d_prediction.a_tf_base import median_scaling, _get_prep_data, _reformat_DF
 from app.d_prediction.NN_tensorflow_models import TF_ERROR_METRICS
 
 from hyperopt import STATUS_OK, Trials, fmin, hp, tpe
 from xgboost import XGBRegressor
 from hyperopt.early_stop import no_progress_loss
-from sklearn.metrics import mean_squared_error, mean_absolute_error, mean_absolute_percentage_error
 import mlflow
 
 
@@ -206,7 +203,7 @@ if __name__ == '__main__':
 
     # results location
     # export_results = False
-    export_results = '/Users/vanalmsick/Workspace/MasterThesis/output/'
+    export_results = '/Users/vanalmsick/Workspace/MasterThesis/results/'
 
     model_name = 'XGBoost'
 
