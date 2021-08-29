@@ -51,7 +51,7 @@ def _find_optimal_model(train, val, test, data_props, examples):
         for set in ['val', 'test']:
             for err, vals in val_results[props][set].items():
                 final_results[props][f'{set}_{err}'] = statistics.mean(vals)
-                if f'{set}_best_score' not in final_results or final_results[f'{set}_best_score'] > final_results[props][f'{set}_{err}']:
+                if props != (0, 0, 0) and (f'{set}_best_score' not in final_results or final_results[f'{set}_best_score'] > final_results[props][f'{set}_{err}']):
                     final_results[f'{set}_best_score'] = final_results[props][f'{set}_{err}']
                     final_results[f'{set}_best_param'] = props
 

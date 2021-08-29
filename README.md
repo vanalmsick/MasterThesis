@@ -121,15 +121,16 @@ data.export_to_excel()
 ```
   
 ## 4. Analyzes/Prediction *([folder: e](app/e_analyses))*
-**All models:**
-1. baseline models *([code](app/e_analyses/a_TF_Baseline.py) / [validation results](results/results_baseline_models_val.csv) / [test results](results/results_baseline_models_test.csv) / [all runs](results/results_baseline_models_search.csv))*
+**All models ([all results](results)):** 
+1. Baseline models *([code](app/e_analyses/a_TF_Baseline.py) / [validation results](results/results_baseline_models_val.csv) / [test results](results/results_baseline_models_test.csv) / [all runs](results/results_baseline_models_search.csv))*
     - last value: prediction = last period value
     - average value: prediction = average of n last periods (best n determined on validation dataset)
     - static value: prediction = value x (best x determined on validation dataset)
-2. regression *([code](app/e_analyses/b_TF_LiteratureFeatures_Linear.py) / [results](results/results_dense_lit_linear_error.csv) / [p-values](results/results_dense_lit_linear_pvalues.csv)  / [coefficients](results/results_dense_lit_linear_coef.csv))*
+2. Regression *([code](app/e_analyses/b_TF_LiteratureFeatures_Linear.py) / [results](results/results_dense_lit_linear_error.csv) / [p-values](results/results_dense_lit_linear_pvalues.csv)  / [coefficients](results/results_dense_lit_linear_coef.csv))*
     - replication of Lev & Thiagarajan (1993)
-3. Machine Learning: XGBoost *([code](app/e_analyses/d_XGBoost.py) / [results](results/results_XGBoost_error.csv) / [best models](results/results_XGBoost_model.csv) / [all runs](results/results_XGBoost_search.csv))*
-4. Neural Networks
+3. Time-series models: ARIMA *([code](app/e_analyses/c_ARIMA.py) / [results & best models](results/results_ARIMA_model.csv) / [runs](results/results_ARIMA_search.csv))*
+4. Machine Learning: XGBoost *([code](app/e_analyses/d_XGBoost.py) / [results](results/results_XGBoost_error.csv) / [best models](results/results_XGBoost_model.csv) / [all runs](results/results_XGBoost_search.csv))*
+5. Neural Networks
     - Multi-Layer-Dense: 
       - just using Lev & Thiagarajan's (1993) features *([code](app/e_analyses/e_TF_LiteratureFeatures_Best.py) / [results](results/results_dense_lit_best_error.csv) / [best models](results/results_dense_lit_best_model.csv) / [all runs](results/results_dense_lit_best_search.csv))*
       - all features *([code](app/e_analyses/e_TF_AllFeatures_Best.py) / [results](results/results_dense_all_best_error.csv) / [best models](results/results_dense_all_best_model.csv) / [all runs](results/results_dense_all_best_search.csv))*
