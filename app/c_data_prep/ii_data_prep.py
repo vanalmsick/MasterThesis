@@ -538,7 +538,8 @@ class data_prep:
             test_y = loaded['test_y']
             test_idx = loaded['test_idx']
             ndarray_columns = pickle.load(open((final_file[:-4] + '_cols.pkl'), 'rb'))
-            y_data = pickle.load(open((final_file[:-4] + '_y.pkl'), 'rb'))
+            self.raw_data = pd.read_pickle(final_file[:-4] + '_y.pkl')
+            #y_data = pickle.load(open((final_file[:-4] + '_y.pkl'), 'rb'))
 
 
             print('Got data from cached file.')
@@ -547,31 +548,7 @@ class data_prep:
 
             start = time.time()
 
-            ##################### ARIMA: just y #####################
-
-            arima_dict = list(train_dict)
-            arima_dict.extend(val_dict)
-            arima_dict.extend(test_dict)
-
-            new_arima_dict = []
-            for i in range(len(arima_dict) - 2):
-                new_arima_dict.append((arima_dict[i][0], arima_dict[i][1], arima_dict[i + 1][1], arima_dict[i + 2][1]))
-
             y_data = {}
-
-            tmp_data = self.data[[self.dataset_company_col] + self.dataset_iter_col + self.dataset_y_col].copy()
-            for comp in self.comps:
-                comp_tmp_data = tmp_data[tmp_data[self.dataset_company_col] == comp].sort_index()
-                if self.window_input_width + (self.window_pred_width * 3) <= len(comp_tmp_data):
-                    for lower_idx, upper_idx, val_idx, test_idx in new_arima_dict:
-                        tmp = comp_tmp_data.loc[lower_idx:test_idx]
-                        if self.window_input_width + (self.window_pred_width * 3) == len(tmp):
-                            if comp not in y_data:
-                                y_data[comp] = {}
-                            idx = (lower_idx, upper_idx, val_idx, test_idx)
-                            y_data[comp][idx] = tmp
-
-
 
 
             ##################### TRAIN #####################
@@ -699,7 +676,8 @@ class data_prep:
             warning_list.to_csv((final_file[:-4] + '_warnings.csv'), index=False)
 
             np.savez_compressed(final_file, train_X=train_X, train_y=train_y, train_idx=train_idx, val_X=val_X, val_y=val_y, val_idx=val_idx, test_X=test_X, test_y=test_y, test_idx=test_idx)
-            pickle.dump(y_data, open((final_file[:-4] + '_y.pkl'), 'wb'))
+            #pickle.dump(y_data, open((final_file[:-4] + '_y.pkl'), 'wb'))
+            self.raw_data.to_pickle(final_file[:-4] + '_y.pkl')
 
             end = time.time()
 
@@ -710,7 +688,7 @@ class data_prep:
                'train': {'X': train_X, 'y': train_y, 'idx': train_idx},
                'val':   {'X': val_X,   'y': val_y,   'idx': val_idx},
                'test':  {'X': test_X,  'y': test_y,  'idx': test_idx},
-               'y_dataset': y_data,
+               'raw_data': self.raw_data,
                'columns': ndarray_columns,
                'columns_lookup': {'X': dict(zip(list(ndarray_columns['X'].values()), list(ndarray_columns['X'].keys()))),
                                   'y': dict(zip(list(ndarray_columns['y'].values()), list(ndarray_columns['y'].keys())))}}
@@ -846,7 +824,29 @@ class data_prep:
             out_dict = self.latest_out
         self.latest_out = out_dict
 
-        return out_dict['y_dataset'], {'window_input_width': self.window_input_width, 'window_pred_width': self.window_pred_width, 'window_shift': self.window_shift}
+        raw_data = out_dict['raw_data']
+
+        arima_df = raw_data.pivot(index=None, columns=self.dataset_company_col, values=self.y_just_these[0])
+        idx = self.iter_dict[out_dict['iter_step']]
+
+        arima_df = arima_df.copy()
+        arima_df = arima_df.loc[idx['train'][0][0]:idx['test'][-1][-1]]
+        arima_df = arima_df.dropna(axis=1)
+
+        out_dict = {'train': {'lower': idx['train'][0][0], 'upper': idx['train'][-1][-1]},
+                    'val': {'lower': min([i for i in arima_df.index.tolist() if i > idx['train'][-1][-1] and i <= idx['val'][-1][-1]]), 'upper': idx['val'][-1][-1]},
+                    'test': {'lower': min([i for i in arima_df.index.tolist() if i > idx['val'][-1][-1] and i <= idx['test'][-1][-1]]), 'upper': idx['test'][-1][-1]}}
+
+        for set in ['train', 'val', 'test']:
+            i_lower = out_dict[set]['lower']
+            i_upper = out_dict[set]['upper']
+            tmp = arima_df.loc[i_lower:i_upper].copy()
+            #tmp = tmp.dropna(axis=1)
+            out_dict[set] = {'y_data': tmp.values.T.astype(float),
+                             'comps': tmp.columns.tolist(),
+                             'iter_steps': tmp.index.tolist()}
+
+        return out_dict
 
     def df_dataset(self, out='all', year_idx=-1, out_dict=None, transpose_y=True):
         if out_dict is None:
@@ -1057,7 +1057,7 @@ class data_prep:
         cols_y = OUT['columns']['y']
         cols_lookup_X = OUT['columns_lookup']['X']
         cols_lookup_y = OUT['columns_lookup']['y']
-        y_dataset = OUT['y_dataset']
+        raw_data = OUT['raw_data']
 
 
         # Filter X columns
@@ -1123,7 +1123,7 @@ class data_prep:
                'train': {'X': train_X, 'y': train_y, 'idx': train_idx},
                'val': {'X': val_X, 'y': val_y, 'idx': val_idx},
                'test': {'X': test_X, 'y': test_y, 'idx': test_idx},
-               'y_dataset': y_dataset,
+               'raw_data': raw_data,
                'columns': {'X': cols_X, 'y': cols_y},
                'columns_lookup': {'X': cols_lookup_X, 'y': cols_lookup_y}}
 
