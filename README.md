@@ -134,5 +134,7 @@ data.export_to_excel()
     - Multi-Layer-Dense: 
       - just using Lev & Thiagarajan's (1993) features *([code](app/e_analyses/e_TF_LiteratureFeatures_Best.py) / [results](results/results_dense_lit_best_error.csv) / [best models](results/results_dense_lit_best_model.csv) / [all runs](results/results_dense_lit_best_search.csv))*
       - all features *([code](app/e_analyses/e_TF_AllFeatures_Best.py) / [results](results/results_dense_all_best_error.csv) / [best models](results/results_dense_all_best_model.csv) / [all runs](results/results_dense_all_best_search.csv))*
-    - LSTM *([code](app/e_analyses/f_TF_LSTM.py) / [results](results/results_lstm_all_error.csv) / [best models](results/results_lstm_all_model.csv) / [all runs](results/results_lstm_all_search.csv))*
+    - LSTM *([code](app/e_analyses/f_TF_LSTM.py))*
+      - just using Lev & Thiagarajan's (1993) features *([results](results/results_lstm_all_error.csv) / [best models](results/results_lstm_all_model.csv) / [all runs](results/results_lstm_all_search.csv))*
+      - all features *( / [results](results/results_lstm_lit_error.csv) / [best models](results/results_lstm_lit_model.csv) / [all runs](results/results_lstm_lit_search.csv))*
    

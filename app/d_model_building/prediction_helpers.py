@@ -42,7 +42,7 @@ def error_overview(y_pred, y_true):
            [(2, 'inf'), 1 - stats.percentileofscore(data, 2)]]
     out = np.array(out).T
 
-
+    return out
 
 
 

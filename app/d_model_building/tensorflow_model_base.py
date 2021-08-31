@@ -12,8 +12,7 @@ import json
 if str(os.getcwd())[-3:] != 'app': raise Exception(f'Working dir must be .../app folder and not "{os.getcwd()}"')
 from app.z_helpers import helpers as my_helpers
 
-from app.d_prediction.NN_tensorflow_models import TF_ERROR_METRICS
-from app.d_prediction.NN_tensorflow_models import compile_and_fit, evaluate_model, CustomMeanDirectionalAccuracy
+from app.d_model_building.tensorflow_compiling import compile_and_fit, evaluate_model, CustomMeanDirectionalAccuracy, TF_ERROR_METRICS
 
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense

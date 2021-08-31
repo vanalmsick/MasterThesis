@@ -10,7 +10,7 @@ import datetime
 if str(os.getcwd())[-3:] != 'app': raise Exception(f'Working dir must be .../app folder and not "{os.getcwd()}"')
 from app.z_helpers import helpers as my_helpers
 
-from app.d_prediction.NN_tensorflow_models import compile_and_fit, evaluate_model
+from app.d_model_building.tensorflow_compiling import compile_and_fit, evaluate_model
 
 class BaselineLastAvg(tf.keras.Model):
     def __init__(self, label_index, periods=1):
@@ -53,7 +53,7 @@ def _collect_all_metrics(model, train_ds, val_ds, test_ds, mlflow_additional_par
 
     return pd.DataFrame({'train': train_performance, 'val': val_performance, 'test': test_performance})
 
-from app.d_prediction.a_tf_base import median_scaling
+from app.d_model_building.tensorflow_model_base import median_scaling
 
 
 
